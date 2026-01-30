@@ -1,0 +1,8 @@
+{
+  "label": "開発",
+  "position": 5,
+  "link": {
+    "type": "generated-index",
+    "description": "プロジェクト構造と利用可能なコマンドを含む、FORMIXへのコントリビューション開発ガイド。"
+  }
+}

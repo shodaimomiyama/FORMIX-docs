@@ -1,0 +1,8 @@
+{
+  "label": "APIリファレンス",
+  "position": 4,
+  "link": {
+    "type": "generated-index",
+    "description": "Actions層とドメインエンティティを含むFORMIXの完全なAPIリファレンス。"
+  }
+}

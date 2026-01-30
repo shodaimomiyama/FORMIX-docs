@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm cache clean:*)",
+      "Bash(sudo chown:*)",
+      "Bash(npm start)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(git -C /Users/momiyamashodai/Develop/MyProject/D-TPRES/D-TPRES log --oneline -10)",
+      "Bash(curl:*)",
+      "Bash(pkill:*)",
+      "Bash(xargs sed:*)",
+      "Bash(yarn build)",
+      "Bash(tree:*)",
+      "Bash(find:*)"
+    ]
+  }
+}
