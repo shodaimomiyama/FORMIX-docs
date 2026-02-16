@@ -4,23 +4,33 @@ sidebar_position: 1
 
 # Architecture Overview
 
-FORMIX follows a **6-Layer Clean Architecture** pattern, ensuring separation of concerns and maintainability.
+FORMIX follows a **Clean Architecture** pattern with clear separation of concerns and dependency inversion.
 
 ## Layer Structure
 
 ```
 ┌─────────────────────────────────────────┐
-│           Actions Layer                  │  ← External API
+│           Actions Layer                  │  ← Public API (DTpresClient, Builders)
 ├─────────────────────────────────────────┤
-│         Use Cases Layer                  │  ← Application Logic
+│         Controller Layer                 │  ← Input Validation & DTO Extraction
 ├─────────────────────────────────────────┤
-│          Domain Layer                    │  ← Business Rules
+│          UseCase Layer                   │  ← Workflow, Service, Core
+│  ┌─────────┬──────────┬──────────┐      │
+│  │Workflow  │ Service  │  Core    │      │
+│  │(Sharing, │(Crypto,  │(Storage, │      │
+│  │Recovery) │ Storage) │ Contract)│      │
+│  └─────────┴──────────┴──────────┘      │
 ├─────────────────────────────────────────┤
-│       Infrastructure Layer               │  ← External Services
+│          Domain Layer                    │  ← Entities, Value Objects, Errors
 ├─────────────────────────────────────────┤
-│        Interfaces Layer                  │  ← Abstractions
+│       Repositories Layer                 │  ← Persistence Abstractions (Traits)
 ├─────────────────────────────────────────┤
-│          Config Layer                    │  ← Configuration
+│         Adapter Layer                    │  ← External Integrations
+│  ┌──────────────┬────────────────┐      │
+│  │RepositoryImpl│   External     │      │
+│  │(Arweave CRUD)│(AO, Arweave,  │      │
+│  │              │ MockAO)        │      │
+│  └──────────────┴────────────────┘      │
 └─────────────────────────────────────────┘
 ```
 
@@ -28,61 +38,101 @@ FORMIX follows a **6-Layer Clean Architecture** pattern, ensuring separation of 
 
 ### Actions Layer
 The entry point for all external interactions. This layer:
-- Exposes the public API
-- Handles input validation
-- Orchestrates use case execution
-- Returns formatted responses
+- Provides `DTpresClient` as the main public API
+- Uses type-state `ShareBuilder` / `RecoverBuilder` for compile-time safety
+- Contains `ActionsContainer` for dependency injection
+- Delegates input validation to the Controller layer
 
 ```rust
-// Example: Actions layer function
-pub fn encrypt_secret(
-    public_key: &PublicKey,
-    data: &SecretData,
-) -> Result<(Capsule, Ciphertext), ActionError>
+// Example: Actions layer usage
+let result = client.share()
+    .secret(data.to_vec())
+    .threshold(3)
+    .total_shares(5)
+    .owner_key(owner_sk)
+    .requester_key(requester_pk)
+    .execute()
+    .await?;
 ```
 
-### Use Cases Layer
-Contains application-specific business logic:
-- Implements user stories and workflows
-- Coordinates domain entities
-- Handles transaction boundaries
+### Controller Layer
+Handles input validation and DTO transformation:
+- `ShareValidator` - Validates share operation parameters
+- `RecoverExtractor` - Extracts and transforms recovery parameters into DTOs
+- `ControllerContainer` - DI container for controller dependencies
+
+### UseCase Layer
+Contains application-specific business logic, organized into three sub-layers:
+
+- **Workflow** - `SecretSharingService` (Phase 1) and `SecretRecoveryService` (Phase 3) orchestrate multi-step operations
+- **Service** - `CryptoService` (Umbral TPRE, Shamir, AES-GCM) and `StorageService` (composite Arweave + AO) provide reusable capabilities
+- **Core** - `ArweaveStorageService`, `ContractStorage`, and `CryptoService` define core trait abstractions
 
 ### Domain Layer
 The core business logic, independent of external concerns:
-- **Entities**: `Secret`, `Capsule`, `KFrag`, `CFrag`
-- **Value Objects**: `KeyPair`, `SecretData`, `PublicKey`
-- **Domain Services**: Cryptographic operations
+- **Entities**: `Secret` (aggregate root), `Capsule`, `ShareCollection`, `KFrag`, `CFrag`
+- **Value Objects**: `SecretId`, `CapsuleId`, `ShareCollectionId`, `KFragId`, `CFragId`, `KeyPair`, `SecretData`, `SymmetricKey`
+- **Errors**: `DomainError` with comprehensive error variants
+- **State Machine**: `SecretState` (Initialized → Split → Distributed → Recovered)
 
-### Infrastructure Layer
+### Repositories Layer
+Defines persistence abstractions using traits with dependency inversion:
+- `SecretRepository` - CRUD for Secret aggregate root
+- `CapsuleRepository` - CRUD + find by secret ID
+- `ShareCollectionRepository` - CRUD + find by secret ID
+- `KFragRepository` - CRUD + find by secret ID, holder index
+- `CFragRepository` - CRUD for re-encrypted fragments
+
+### Adapter Layer
 Implements external integrations:
-- Arweave storage client
-- AO Network process management
-- EVM contract interactions
+- **RepositoryImpl** - Arweave-backed implementations of all repository traits
+- **External/AO** - `AOClient` trait, `ProductionAOClient`, message types (`ExecuteMsg`, `QueryMsg`)
+- **External/Arweave** - `ArweaveClient` trait, transaction handling, deep hash, wallet management
+- **External/MockAO** - In-memory AO client for testing
 
-### Interfaces Layer
-Defines abstractions for infrastructure:
-- Repository interfaces
-- External service contracts
-- Event definitions
+## Storage Architecture
 
-### Config Layer
-System configuration and constants:
-- Network parameters
-- Cryptographic constants
-- Feature flags
+FORMIX uses a composite storage pattern separating immutable data storage from contract communication:
+
+```
+┌──────────────────────────────────────────────┐
+│              StorageService                   │
+│  (Composite: Arweave + Contract)             │
+├──────────────────────┬───────────────────────┤
+│ ArweaveStorageService│   ContractStorage     │
+│ (Immutable data)     │   (AO Network)        │
+│ - store_data()       │   - send_kfrags()     │
+│ - retrieve_data()    │   - delegate_capsule()│
+│ - query_by_tags()    │   - retrieve_cfrags() │
+│ - batch_store()      │   - retrieve_threshold│
+└──────────────────────┴───────────────────────┘
+```
+
+### Tag-Based Storage
+
+All entities stored on Arweave use a consistent tagging strategy for discoverability:
+
+| Tag | Description |
+|-----|-------------|
+| `App-Name` | Always `"FORMIX"` |
+| `Entity-Type` | `Secret`, `ShareCollection`, `Capsule`, `KFrag`, `CFrag` |
+| `Entity-Id` | Entity-specific UUID |
+| `Secret-Id` | Parent secret UUID (for child entities) |
+| `Holder-Index` | Position in holder set (for KFrags) |
+| `Deleted` | Soft delete flag |
 
 ## Process Architecture
 
-FORMIX operates through three distinct AO processes:
+FORMIX operates through AO processes for re-encryption coordination:
 
 ```
 ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
 │    Owner     │    │    Holder    │    │  Requester   │
-│   Process    │    │   Process    │    │   Process    │
+│  (Client)    │    │  (AO Proc)  │    │  (Client)    │
 ├──────────────┤    ├──────────────┤    ├──────────────┤
 │ - Encrypt    │    │ - Store      │    │ - Request    │
-│ - Gen KFrags │───▶│ - Distribute │◀───│ - Collect    │
-│ - Authorize  │    │ - Re-encrypt │    │ - Decrypt    │
+│ - Gen KFrags │───▶│ - Re-encrypt │◀───│ - Collect    │
+│ - Authorize  │    │ - Distribute │    │ - Decrypt    │
 └──────────────┘    └──────────────┘    └──────────────┘
         │                   │                   │
         └───────────────────┴───────────────────┘
@@ -93,32 +143,16 @@ FORMIX operates through three distinct AO processes:
                     └──────────────┘
 ```
 
-### Owner Process
-- Generates and manages encryption keys
-- Creates and encrypts secrets
-- Generates re-encryption key fragments (KFrags)
-- Defines access policies
-
-### Holder Process
-- Stores encrypted data references
-- Maintains KFrag distribution
-- Performs re-encryption operations
-- Manages proxy node coordination
-
-### Requester Process
-- Initiates access requests
-- Collects re-encrypted fragments (CFrags)
-- Performs final decryption
-- Verifies data integrity
+The current `DTpresClient` is designed for **single-user (self-service) workflows** where the caller acts as both data owner and requester within one AO process context.
 
 ## Data Flow
 
-1. **Encryption**: Owner encrypts data → Capsule + Ciphertext
-2. **Key Generation**: Owner creates KFrags → distributed to proxies
-3. **Storage**: Ciphertext stored on Arweave
-4. **Request**: Requester requests access
-5. **Re-encryption**: Proxies generate CFrags
-6. **Decryption**: Requester combines CFrags → decrypts
+1. **Encryption**: Owner encrypts data → Capsule + Encrypted Shares
+2. **Storage**: Capsule and ShareCollection stored on Arweave
+3. **Distribution**: Owner generates KFrags → sent to AO Holder-Process
+4. **Request**: Requester requests access via AO
+5. **Re-encryption**: Holder generates CFrags from KFrags
+6. **Decryption**: Requester combines CFrags → decrypts shares → recovers secret
 
 ## Next Steps
 

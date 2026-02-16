@@ -31,8 +31,8 @@ Three distinct process types (Owner, Holder, Requester) operate as WebAssembly m
 |-----------|------------|---------|
 | Storage | Arweave | Permanent, decentralized data storage |
 | Compute | AO Network | Distributed process execution |
-| Cryptography | TPRE (Rust/Wasm) | Threshold proxy re-encryption |
-| Smart Contracts | EVM Compatible | Access control policies |
+| Cryptography | Umbral TPRE (Rust/Wasm) | Threshold proxy re-encryption |
+| Smart Contracts | AO Network (Lua) | Re-encryption key coordination |
 
 ## Development Status
 

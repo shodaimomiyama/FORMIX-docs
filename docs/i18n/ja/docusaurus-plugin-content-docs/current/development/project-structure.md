@@ -10,207 +10,165 @@ sidebar_position: 1
 
 ```
 FORMIX/
-├── src/
-│   ├── actions/           # Actions層（外部API）
-│   ├── use_cases/         # Use Cases層（アプリケーションロジック）
-│   ├── domain/            # Domain層（ビジネスルール）
-│   │   ├── entities/      # ドメインエンティティ
-│   │   └── value_objects/ # 値オブジェクト
-│   ├── infrastructure/    # Infrastructure層
-│   ├── interfaces/        # インターフェース定義
-│   └── config/            # 設定
-├── processes/
-│   ├── owner/             # Owner AOプロセス
-│   ├── holder/            # Holder AOプロセス
-│   └── requester/         # Requester AOプロセス
-├── crypto/                # 暗号プリミティブ
-├── tests/
-│   ├── unit/              # 単体テスト
-│   ├── integration/       # 統合テスト
-│   └── e2e/               # E2Eテスト
-├── examples/              # サンプルコード
-├── docs/                  # ドキュメント（このサイト）
-└── scripts/               # ビルドとデプロイスクリプト
+├── client/                    # メインRustクライアントライブラリ
+│   ├── src/
+│   │   ├── actions/           # Actionsレイヤー（パブリックAPI）
+│   │   ├── controller/        # Controllerレイヤー（バリデーション、抽出）
+│   │   ├── usecase/           # UseCaseレイヤー（ワークフロー、サービス、コア）
+│   │   ├── domain/            # Domainレイヤー（エンティティ、値オブジェクト）
+│   │   ├── repositories/      # リポジトリインターフェース（トレイト）
+│   │   ├── adapter/           # Adapterレイヤー（実装）
+│   │   ├── lib.rs             # クレートルート
+│   │   └── di.rs              # トップレベルDI設定
+│   ├── Cargo.toml
+│   └── tests/
+├── ao/                        # AO Networkスマートコントラクト
+│   └── holder-process/        # Holder-Process (Lua)
+├── docs/                      # アーキテクチャ・設計ドキュメント
+└── .spec-workflow/            # 仕様ワークフローファイル
 ```
 
 ## ソースコード構造
 
-### `src/actions/`
+### `client/src/actions/`
 
-外部コードが対話するパブリックAPI層。
+外部コードが対話するパブリックAPIレイヤー。
 
 ```
 actions/
 ├── mod.rs
-├── encryption.rs      # 暗号化/復号アクション
-├── key_management.rs  # 鍵生成アクション
-├── reencryption.rs    # 再暗号化アクション
-└── errors.rs          # アクションエラー型
+├── client.rs          # DTpresClient - メインエントリーポイント
+├── builder.rs         # ShareBuilder & RecoverBuilder (Type-Stateパターン)
+├── di.rs              # ActionsContainer DI
+├── error.rs           # ActionErrorタイプ
+└── options.rs         # ShareOptions設定
 ```
 
-### `src/use_cases/`
+### `client/src/controller/`
+
+入力バリデーションとDTO変換レイヤー。
+
+```
+controller/
+├── mod.rs
+├── di.rs              # ControllerContainer DI
+├── validator.rs       # ShareValidator（パラメータバリデーション）
+├── extractor.rs       # RecoverExtractor（DTO抽出）
+└── error.rs           # ValidationErrorタイプ
+```
+
+### `client/src/usecase/`
 
 アプリケーション固有のビジネスロジックとワークフロー。
 
 ```
-use_cases/
+usecase/
 ├── mod.rs
-├── encrypt_secret.rs
-├── grant_access.rs
-├── request_access.rs
-└── decrypt_secret.rs
+├── dto.rs             # データ転送オブジェクト
+├── error.rs           # WorkflowErrorタイプ
+├── core/              # コアサービストレイト定義
+│   ├── crypto.rs      # CryptoServiceトレイト（TPRE, Shamir, AES-GCM）
+│   ├── storage.rs     # ArweaveStorageServiceトレイト & 実装
+│   └── contract_storage.rs  # ContractStorageトレイト（AO Network）
+├── service/           # 複合サービス実装
+│   ├── crypto_service.rs    # ServiceCryptoServiceImpl
+│   └── storage_service.rs   # StorageServiceImpl（Arweave + Contract）
+└── workflow/          # マルチステップワークフローオーケストレーション
+    ├── container.rs   # WorkflowServiceContainer DI
+    ├── secret_sharing_service.rs   # フェーズ1ワークフロー
+    └── secret_recovery_service.rs  # フェーズ3ワークフロー
 ```
 
-### `src/domain/`
+### `client/src/domain/`
 
 コアビジネスロジック、エンティティ、値オブジェクト。
 
 ```
 domain/
-├── mod.rs
+├── errors.rs          # DomainError包括的エラータイプ
 ├── entities/
-│   ├── mod.rs
-│   ├── secret.rs      # Secretエンティティ
-│   ├── capsule.rs     # Capsuleエンティティ
-│   ├── kfrag.rs       # KFragエンティティ
+│   ├── secret.rs      # Secretエンティティ（集約ルート、ステートマシン）
+│   ├── capsule.rs     # Capsuleエンティティ（Umbral PRE Capsule）
+│   ├── share.rs       # ShareCollection + EncryptedShareData
+│   ├── kfrag.rs       # KFragエンティティ（ドロップ時ゼロ化）
 │   └── cfrag.rs       # CFragエンティティ
 └── value_objects/
-    ├── mod.rs
-    ├── keypair.rs     # KeyPair値オブジェクト
-    ├── secret_data.rs # SecretData値オブジェクト
-    └── public_key.rs  # PublicKey値オブジェクト
+    ├── ids.rs          # 型安全なID（SecretId, CapsuleId等）
+    ├── key_pair.rs     # KeyPair（ドロップ時ゼロ化）
+    ├── secret_data.rs  # SecretData（ドロップ時ゼロ化）
+    └── symmetric_key.rs # SymmetricKey
 ```
 
-### `src/infrastructure/`
+### `client/src/repositories/`
 
-外部サービス統合。
-
-```
-infrastructure/
-├── mod.rs
-├── arweave/
-│   ├── client.rs      # Arweaveクライアント
-│   └── storage.rs     # ストレージ操作
-├── ao/
-│   ├── process.rs     # AOプロセス管理
-│   └── message.rs     # AOメッセージング
-└── evm/
-    └── contracts.rs   # EVMコントラクトインタラクション
-```
-
-### `src/interfaces/`
-
-抽象インターフェースとリポジトリ定義。
+永続化のための抽象リポジトリインターフェース（トレイト）。
 
 ```
-interfaces/
-├── mod.rs
-├── repositories/
-│   ├── secret_repository.rs
-│   └── kfrag_repository.rs
-└── services/
-    ├── storage_service.rs
-    └── crypto_service.rs
+repositories/
+├── secret_interface.rs         # SecretRepositoryトレイト
+├── capsule_interface.rs        # CapsuleRepositoryトレイト
+├── share_interface.rs          # ShareCollectionRepositoryトレイト
+├── kfrag_interface.rs          # KFragRepositoryトレイト
+└── cfrag_interface.rs          # CFragRepositoryトレイト
 ```
 
-## プロセス構造
+### `client/src/adapter/`
 
-### Ownerプロセス
-
-```
-processes/owner/
-├── Cargo.toml
-├── src/
-│   ├── lib.rs
-│   ├── handlers/      # メッセージハンドラ
-│   ├── state.rs       # プロセス状態
-│   └── wasm.rs        # Wasmエントリーポイント
-└── build.sh
-```
-
-### Holderプロセス
+外部サービス統合とリポジトリ実装。
 
 ```
-processes/holder/
-├── Cargo.toml
-├── src/
-│   ├── lib.rs
-│   ├── handlers/
-│   ├── state.rs
-│   ├── proxy/         # プロキシノードロジック
-│   └── wasm.rs
-└── build.sh
+adapter/
+├── errors.rs                   # AdapterErrorタイプ
+├── repository_impl/            # Arweaveバックのリポジトリ実装
+│   ├── secret_impl.rs
+│   ├── capsule_impl.rs
+│   ├── share_impl.rs
+│   ├── kfrag_impl.rs
+│   └── cfrag_impl.rs
+└── external/                   # 外部サービスクライアント
+    ├── ao/                     # AO Networkクライアント
+    │   ├── client.rs           # AOClientトレイト
+    │   ├── production_client.rs
+    │   ├── message.rs          # ExecuteMsg, QueryMsg, Binary
+    │   └── config.rs
+    ├── arweave/                # Arweaveクライアント
+    │   ├── client.rs           # ArweaveClientトレイト
+    │   ├── transaction.rs
+    │   ├── wallet.rs
+    │   └── deep_hash.rs
+    └── mock_ao/                # テスト用モックAOクライアント
+        ├── client.rs           # MockAOClient（インメモリ）
+        └── message.rs
 ```
-
-### Requesterプロセス
-
-```
-processes/requester/
-├── Cargo.toml
-├── src/
-│   ├── lib.rs
-│   ├── handlers/
-│   ├── state.rs
-│   └── wasm.rs
-└── build.sh
-```
-
-## 暗号ライブラリ
-
-```
-crypto/
-├── Cargo.toml
-├── src/
-│   ├── lib.rs
-│   ├── curve.rs       # 楕円曲線操作
-│   ├── keys.rs        # 鍵生成
-│   ├── encryption.rs  # 暗号プリミティブ
-│   ├── pre.rs         # プロキシ再暗号化
-│   └── threshold.rs   # 閾値操作
-└── benches/
-    └── crypto_bench.rs
-```
-
-## 設定ファイル
-
-```
-FORMIX/
-├── Cargo.toml         # Rustワークスペース設定
-├── Makefile           # ビルドコマンド
-├── rust-toolchain.toml # Rustバージョン指定
-├── .github/
-│   └── workflows/     # CI/CDパイプライン
-└── config/
-    ├── default.toml   # デフォルト設定
-    └── test.toml      # テスト設定
-```
-
-## 主要ファイル
-
-| ファイル | 目的 |
-|------|---------|
-| `Cargo.toml` | ワークスペースと依存関係管理 |
-| `Makefile` | ビルド、テスト、デプロイコマンド |
-| `rust-toolchain.toml` | Rustバージョン固定 |
-| `.env.example` | 環境変数テンプレート |
 
 ## モジュール依存関係
 
 ```
 actions
     ↓
-use_cases
+controller
     ↓
-domain ← interfaces
+usecase (workflow → service → core)
     ↓
-infrastructure
-    ↓
-config
+domain ← repositories
+    ↑         ↑
+    └─────────┘
+         ↑ (依存性逆転)
+    adapter
 ```
 
-依存ルール：内側の層は外側の層に依存しない。
+## 設計パターン
+
+| パターン | 用途 |
+|---------|-------|
+| クリーンアーキテクチャ | 依存性逆転によるレイヤー分離 |
+| Type-State | コンパイル時ビルダーパラメータ強制 |
+| 集約ルート | `Secret` が関連エンティティを管理 |
+| リポジトリ | トレイトによる永続化抽象 |
+| 合成 | StorageServiceがArweave + Contractを合成 |
+| Zeroize on Drop | 暗号素材の安全なメモリクリア |
 
 ## 次のステップ
 
 - [開発コマンド](/docs/development/commands) - 利用可能なmakeターゲット
-- [APIリファレンス](/docs/api/actions-api) - Actions層ドキュメント
+- [APIリファレンス](/docs/api/actions-api) - Actionsレイヤードキュメント

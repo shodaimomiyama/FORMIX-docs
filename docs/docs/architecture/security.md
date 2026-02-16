@@ -4,7 +4,7 @@ sidebar_position: 3
 
 # Security Properties
 
-FORMIX provides strong cryptographic guarantees through its threshold proxy re-encryption scheme.
+FORMIX provides strong cryptographic guarantees through its Umbral-based threshold proxy re-encryption scheme.
 
 ## Core Security Properties
 
@@ -14,12 +14,7 @@ FORMIX achieves **Indistinguishability under Chosen Plaintext Attack (IND-CPA)**
 
 - An adversary cannot distinguish between encryptions of two different messages
 - Even with access to an encryption oracle, the ciphertext reveals nothing about the plaintext
-- Security relies on the hardness of the Decisional Diffie-Hellman (DDH) problem
-
-```
-Given: (G, g^a, g^b, g^c)
-Hard to determine: Is c = ab mod q?
-```
+- Security relies on the hardness of the Decisional Diffie-Hellman (DDH) problem on the underlying elliptic curve
 
 ### Threshold Fault Tolerance
 
@@ -46,48 +41,67 @@ Even if multiple parties collude, they cannot:
 
 ## Cryptographic Primitives
 
-### Elliptic Curve Cryptography
+### Umbral Proxy Re-Encryption
 
-FORMIX uses the **BLS12-381** curve, providing:
+FORMIX uses the **Umbral** threshold proxy re-encryption scheme, providing:
 
-- ~128-bit security level
-- Efficient pairing operations
-- Small key/signature sizes
+- Threshold re-encryption without revealing the owner's secret key
+- Unidirectional re-encryption (owner → requester only)
+- Non-interactive key generation (owner generates KFrags without requester participation)
 
-```
-Security Level: 128 bits
-G1 Point Size: 48 bytes
-G2 Point Size: 96 bytes
-```
+### Hybrid Encryption
 
-### Key Encapsulation
-
-The capsule encapsulates a symmetric key using hybrid encryption:
+The capsule encapsulates a symmetric key using Umbral PRE:
 
 ```
-1. Generate random r
-2. Compute E = r * G (generator point)
-3. Compute V = r * pk_owner
-4. Derive symmetric key = H(r * pk_owner)
-5. Capsule = (E, V, signature)
+1. Generate random symmetric key k_owner
+2. Capsule = PRE_Enc(pk_owner, k_owner)
+3. Encrypt data with AES-GCM using k_owner
+4. Store Capsule + Ciphertext separately
+```
+
+### Shamir Secret Sharing
+
+Shares are generated using Shamir's Secret Sharing for threshold recovery:
+
+```
+1. Choose random polynomial f(x) of degree t-1
+2. f(0) = secret (the value to be shared)
+3. Share_i = f(i) for i = 1, ..., n
+4. Each share encrypted: C_i = AES_GCM(k_owner, Share_i)
 ```
 
 ### Re-Encryption Key Generation
 
-KFrags are generated using Shamir's Secret Sharing variant:
+KFrags are generated using Umbral's key fragment scheme:
 
 ```
-1. Choose random polynomial f(x) of degree t-1
-2. f(0) = sk_owner * sk_requester^(-1) [conceptually]
-3. KFrag_i = f(i) for i = 1, ..., n
-4. Each KFrag includes proof of correctness
+1. Owner generates n KFrags from (sk_owner, pk_requester, t, n)
+2. Each KFrag enables one proxy to perform re-encryption
+3. t KFrags needed to reconstruct the re-encrypted capsule
+4. KFrags are zeroized from memory after distribution
 ```
+
+## Memory Safety
+
+FORMIX implements strict memory safety for cryptographic material:
+
+| Component | Protection |
+|-----------|-----------|
+| `KFrag.kfrag_data` | `Zeroize` + `ZeroizeOnDrop` |
+| `KeyPair.secret_key` | `Zeroize` + `ZeroizeOnDrop` |
+| `SecretData.secret_bytes` | `Zeroize` + `ZeroizeOnDrop` |
+| `SecretRecoveryResult.recovered_secret` | `Zeroize` + `ZeroizeOnDrop` |
+| `ShareBuilder.secret` | Wrapped in `Zeroizing<Vec<u8>>` |
+| `SecretSharingRequest.secret` | Custom `Drop` with `zeroize()` |
+
+Debug output for sensitive types displays `[REDACTED]` instead of actual values.
 
 ## Attack Resistance
 
 ### Replay Attacks
 
-- Each capsule includes a unique identifier
+- Each capsule and secret has a unique identifier
 - Re-encryption requests are tracked by nonce
 - Duplicate requests are rejected
 
@@ -107,7 +121,7 @@ KFrags are generated using Shamir's Secret Sharing variant:
 
 FORMIX security depends on:
 
-1. **DDH Assumption**: Decisional Diffie-Hellman is hard in G1
+1. **DDH Assumption**: Decisional Diffie-Hellman is hard on the underlying elliptic curve
 2. **Random Oracle Model**: Hash functions behave as random oracles
 3. **Threshold Assumption**: Fewer than `t` proxies are compromised
 4. **AO Security**: AO Network provides process isolation
@@ -120,8 +134,9 @@ FORMIX security depends on:
 |--------|------------|
 | Eavesdropping | End-to-end encryption |
 | Proxy compromise (< t) | Threshold distribution |
-| Storage compromise | Data encrypted at rest |
+| Storage compromise | Data encrypted at rest on Arweave |
 | Replay attacks | Nonce-based request tracking |
+| Memory inspection | Zeroize-on-drop for all sensitive data |
 
 ### Out of Scope
 

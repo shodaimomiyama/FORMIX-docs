@@ -2,291 +2,193 @@
 sidebar_position: 1
 ---
 
-# Actions層 API
+# Actions レイヤー API
 
-Actions層はFORMIXと対話するための主要なインターフェースを提供します。すべての外部操作はこの層を通じて実行されます。
+Actionsレイヤーは、FORMIXとの相互作用のための主要なインターフェースを提供します。すべての外部操作は `DTpresClient` または内部の `ActionsContainer` を通じて実行されます。
 
 ## 概要
 
 ```rust
-use formix::actions::*;
+use formix::actions::client::DTpresClient;
+use formix::actions::di::DefaultActionsContainer;
 ```
 
-Actions層は以下の機能を公開します：
-- 鍵生成と管理
-- データの暗号化と復号
-- 再暗号化鍵の配布
-- アクセス要求の処理
+Actionsレイヤーが公開する主要コンポーネント：
+- `DTpresClient` - ビルダーパターンAPIを持つ高レベルクライアント
+- `ActionsContainer` - Controller、WorkflowService、CryptoServiceを集約するDIコンテナ
+- `ShareBuilder` / `RecoverBuilder` - コンパイル時安全性を備えたType-Stateビルダー
 
-## 鍵管理
+## 依存性注入
 
-### `generate_keypair`
+### `ActionsContainer`
 
-新しい暗号鍵ペアを生成します。
+Actionsレイヤーの中央DIコンテナで、すべての依存関係を集約します。
 
 ```rust
-pub fn generate_keypair() -> Result<KeyPair, ActionError>
+pub struct ActionsContainer<C: CoreCryptoService, ST: StorageService> {
+    controller: ControllerContainer<C>,
+    workflow_services: WorkflowServiceContainer<ServiceCryptoServiceImpl<C>, ST>,
+    crypto_service: Arc<C>,
+}
 ```
 
-**戻り値**: 公開鍵と秘密鍵を含む新しい`KeyPair`。
-
-**例**:
-```rust
-let keypair = generate_keypair()?;
-println!("公開鍵: {:?}", keypair.public_key());
-```
-
-### `derive_public_key`
-
-秘密鍵から公開鍵を導出します。
+**デフォルト具象型**:
 
 ```rust
-pub fn derive_public_key(private_key: &PrivateKey) -> PublicKey
-```
+pub type DefaultActionsContainer =
+    ActionsContainer<CoreCryptoServiceImpl, DefaultStorageService>;
 
-## 暗号化操作
-
-### `encrypt_data`
-
-公開鍵を使用してデータを暗号化します。
-
-```rust
-pub fn encrypt_data(
-    public_key: &PublicKey,
-    data: &SecretData,
-) -> Result<(Capsule, Ciphertext), ActionError>
-```
-
-**パラメータ**:
-- `public_key`: Ownerの公開鍵
-- `data`: 暗号化するデータ
-
-**戻り値**: `(Capsule, Ciphertext)`のタプル
-
-**例**:
-```rust
-let data = SecretData::new(b"機密情報".to_vec());
-let (capsule, ciphertext) = encrypt_data(&owner_pk, &data)?;
-```
-
-### `decrypt_data`
-
-Ownerの秘密鍵を使用してデータを復号します（直接復号）。
-
-```rust
-pub fn decrypt_data(
-    private_key: &PrivateKey,
-    capsule: &Capsule,
-    ciphertext: &Ciphertext,
-) -> Result<SecretData, ActionError>
-```
-
-## 再暗号化鍵生成
-
-### `generate_kfrags`
-
-Requester用の再暗号化鍵フラグメントを生成します。
-
-```rust
-pub fn generate_kfrags(
-    owner_keypair: &KeyPair,
-    requester_public_key: &PublicKey,
-    threshold: u8,
-    shares: u8,
-) -> Result<Vec<KFrag>, ActionError>
-```
-
-**パラメータ**:
-- `owner_keypair`: Ownerの鍵ペア
-- `requester_public_key`: 意図された受信者の公開鍵
-- `threshold`: 復号に必要な最小フラグメント数
-- `shares`: 生成するフラグメントの総数
-
-**戻り値**: `KFrag`オブジェクトのベクター
-
-**例**:
-```rust
-let kfrags = generate_kfrags(
-    &owner_keypair,
-    &requester_pk,
-    3,  // 閾値
-    5,  // 総シェア数
-)?;
-```
-
-### `verify_kfrag`
-
-KFragの正しさを検証します。
-
-```rust
-pub fn verify_kfrag(
-    kfrag: &KFrag,
-    owner_public_key: &PublicKey,
-    requester_public_key: &PublicKey,
-) -> Result<bool, ActionError>
-```
-
-## 再暗号化操作
-
-### `reencrypt`
-
-KFragを使用して再暗号化を実行します。
-
-```rust
-pub fn reencrypt(
-    capsule: &Capsule,
-    kfrag: &KFrag,
-) -> Result<CFrag, ActionError>
-```
-
-**パラメータ**:
-- `capsule`: 暗号化からの元のカプセル
-- `kfrag`: 再暗号化鍵フラグメント
-
-**戻り値**: `CFrag`（再暗号化されたカプセルフラグメント）
-
-### `verify_cfrag`
-
-CFragの正しさを検証します。
-
-```rust
-pub fn verify_cfrag(
-    cfrag: &CFrag,
-    capsule: &Capsule,
-    owner_public_key: &PublicKey,
-    requester_public_key: &PublicKey,
-) -> Result<bool, ActionError>
-```
-
-## 再暗号化による復号
-
-### `decrypt_reencrypted`
-
-再暗号化フラグメントを使用してデータを復号します。
-
-```rust
-pub fn decrypt_reencrypted(
-    requester_keypair: &KeyPair,
-    owner_public_key: &PublicKey,
-    capsule: &Capsule,
-    cfrags: &[CFrag],
-    ciphertext: &Ciphertext,
-) -> Result<SecretData, ActionError>
-```
-
-**パラメータ**:
-- `requester_keypair`: Requesterの鍵ペア
-- `owner_public_key`: 元のOwnerの公開鍵
-- `capsule`: 元のカプセル
-- `cfrags`: 再暗号化フラグメントのコレクション（>= 閾値）
-- `ciphertext`: 暗号化データ
-
-**戻り値**: 復号された`SecretData`
-
-**例**:
-```rust
-let plaintext = decrypt_reencrypted(
-    &requester_keypair,
-    &owner_pk,
-    &capsule,
-    &cfrags,
-    &ciphertext,
-)?;
+pub type DefaultStorageService =
+    StorageServiceImpl<ArweaveStorageServiceImpl, ContractStorageImpl<MockAOClient>>;
 ```
 
 ## ドメインエンティティ
 
-### Secret
+### Secret（集約ルート）
 
-メタデータを含む暗号化データを表します。
+秘密のライフサイクルとメタデータを管理します。実際の秘密データは保持しません。
 
 ```rust
 pub struct Secret {
-    pub id: SecretId,
-    pub capsule: Capsule,
-    pub ciphertext_ref: ArweaveRef,
-    pub owner: PublicKey,
-    pub created_at: Timestamp,
+    id: SecretId,
+    threshold_k: u8,                              // 必要な最小シェア数
+    threshold_n: u8,                              // 総シェア数
+    state: SecretState,                           // ステートマシン
+    capsule_id: Option<CapsuleId>,                // PRE Capsule参照
+    share_collection_id: Option<ShareCollectionId>, // 暗号化シェア参照
+    kfrag_ids: Vec<KFragId>,                      // 配布された鍵フラグメント
+    owner_public_key: Vec<u8>,                    // Ownerの PRE公開鍵
+    requester_public_key: Option<Vec<u8>>,        // Requesterの PRE公開鍵
+    created_at: u64,
 }
 ```
 
+**ステートマシン**:
+
+```
+Initialized → Split → Distributed → Recovered
+```
+
+| 状態 | 説明 |
+|-------|-------------|
+| `Initialized` | 作成済み、未処理 |
+| `Split` | シェアとCapsuleが作成済み |
+| `Distributed` | KFragがホルダーに配布済み |
+| `Recovered` | Requesterが秘密を復元済み |
+
 ### Capsule
 
-カプセル化された対称鍵を含みます。
+暗号化時に生成されたUmbral PRE Capsuleのシリアライズデータを保持します。
 
 ```rust
 pub struct Capsule {
-    pub point_e: G1Point,
-    pub point_v: G1Point,
-    pub signature: Signature,
+    id: CapsuleId,
+    secret_id: SecretId,
+    capsule_data: Vec<u8>,           // シリアライズされたUmbral Capsule（公開）
+    owner_public_key: Vec<u8>,       // Ownerの PRE公開鍵
+    arweave_tx_id: Option<String>,   // Arweaveストレージ参照
+    created_at: u64,
+}
+```
+
+### ShareCollection
+
+秘密のすべてのn個の暗号化Shamirシェアを保持します。
+
+```rust
+pub struct ShareCollection {
+    id: ShareCollectionId,
+    secret_id: SecretId,
+    threshold_k: u8,
+    threshold_n: u8,
+    shares: Vec<EncryptedShareData>,
+    arweave_tx_id: Option<String>,
+    created_at: u64,
+}
+
+pub struct EncryptedShareData {
+    index: u8,                         // シェアインデックス (1..=n)
+    encrypted_data: Vec<u8>,           // C_i = AES_GCM(k_O, f(i))
 }
 ```
 
 ### KFrag
 
-再暗号化鍵フラグメント。
+Holder-Processに配布される再暗号化鍵フラグメント。
 
 ```rust
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct KFrag {
-    pub id: FragmentId,
-    pub key: G2Point,
-    pub precursor: G1Point,
-    pub proof: KFragProof,
+    id: KFragId,
+    secret_id: SecretId,
+    holder_index: u8,
+    holder_process_id: Option<String>,
+    kfrag_data: Vec<u8>,               // シリアライズされたUmbral KeyFrag（機密）
+    created_at: u64,
 }
 ```
 
 ### CFrag
 
-再暗号化されたカプセルフラグメント。
+Holder-Processによって生成された再暗号化Capsuleフラグメント。
 
 ```rust
 pub struct CFrag {
-    pub point_e1: G1Point,
-    pub point_v1: G1Point,
-    pub kfrag_id: FragmentId,
-    pub proof: CFragProof,
+    id: CFragId,
+    secret_id: SecretId,
+    kfrag_id: KFragId,
+    cfrag_data: Vec<u8>,
+    holder_process_id: String,
 }
 ```
 
 ## 値オブジェクト
 
+### 型安全なID
+
+```rust
+pub struct SecretId(String);
+pub struct CapsuleId(String);
+pub struct ShareCollectionId(String);
+pub struct KFragId(String);
+pub struct CFragId(String);
+```
+
 ### KeyPair
 
 ```rust
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct KeyPair {
-    private_key: PrivateKey,
-    public_key: PublicKey,
-}
-
-impl KeyPair {
-    pub fn generate() -> Self;
-    pub fn public_key(&self) -> &PublicKey;
-    pub fn private_key(&self) -> &PrivateKey;
+    secret_key: Vec<u8>,
+    public_key: Vec<u8>,
 }
 ```
 
 ### SecretData
 
 ```rust
-pub struct SecretData(Vec<u8>);
-
-impl SecretData {
-    pub fn new(data: Vec<u8>) -> Self;
-    pub fn as_bytes(&self) -> &[u8];
+#[derive(Zeroize, ZeroizeOnDrop)]
+pub struct SecretData {
+    secret_bytes: Vec<u8>,
 }
 ```
 
 ## エラー型
 
+### ActionError
+
 ```rust
 pub enum ActionError {
-    InvalidKey(String),
-    EncryptionFailed(String),
-    DecryptionFailed(String),
-    InvalidThreshold { threshold: u8, shares: u8 },
-    InsufficientFragments { required: u8, provided: u8 },
-    VerificationFailed(String),
-    StorageError(String),
+    ValidationFailed { code: String, message: String },
+    WorkflowFailed { message: String },
+    ResourceNotFound { resource: String },
+    CryptoError { message: String },
+    PartialStorageFailure {
+        capsule_tx_id: String,
+        successful_share_tx_ids: Vec<String>,
+        failed_shares: Vec<(String, String)>,
+        message: String,
+    },
 }
 ```
 

@@ -13,56 +13,65 @@ Phase 1        Phase 2        Phase 3        Phase 4        Phase 5        Phase
 ┌──────┐      ┌──────┐      ┌──────┐      ┌──────┐      ┌──────┐      ┌──────┐
 │Setup │──────│Encrypt│─────│Distrib│─────│Request│─────│Re-Enc│──────│Decrypt│
 └──────┘      └──────┘      └──────┘      └──────┘      └──────┘      └──────┘
-  Owner        Owner         Owner          Requester     Proxies      Requester
+  Owner        Owner         Owner          Requester     Holders      Requester
 ```
 
 ## Phase 1: Setup
 
 **Actor**: Owner
 
-The owner generates cryptographic key pairs and initializes the system.
+The owner generates Umbral PRE cryptographic key pairs and initializes the client.
 
 ```rust
-// Generate owner's key pair
-let owner_keypair = KeyPair::generate();
+use formix::actions::client::DTpresClient;
 
-// Initialize owner process on AO
-let owner_process = OwnerProcess::new(owner_keypair)?;
+// Initialize client
+let client = DTpresClient::new(
+    "owner-process-id".to_string(),
+    "wallet-address".to_string(),
+    "https://ao.arweave.net".to_string(),
+    "https://arweave.net".to_string(),
+);
+
+// Generate key pairs
+let (owner_sk, owner_pk) = client.generate_keypair()?;
+let (requester_sk, requester_pk) = client.generate_keypair()?;
 ```
 
 **Outputs**:
-- Owner public/private key pair
-- Initialized Owner process
+- Owner public/private key pair (Umbral PRE)
+- Requester public/private key pair (Umbral PRE)
 
 ## Phase 2: Encryption
 
 **Actor**: Owner
 
-The owner encrypts sensitive data using their public key.
+The owner encrypts data using Umbral PRE and creates Shamir shares. Internally, the `share()` builder orchestrates:
+
+1. PRE encryption with owner's public key → produces **Capsule**
+2. Shamir Secret Sharing of the symmetric key → produces **ShareCollection**
+3. AES-GCM encryption of each share with the owner's symmetric key
 
 ```rust
-// Prepare data for encryption
-let secret_data = SecretData::new(sensitive_bytes);
-
-// Encrypt data
-let (capsule, ciphertext) = owner_process.encrypt(&secret_data)?;
-
-// Store ciphertext on Arweave
-let arweave_tx = storage.upload(&ciphertext).await?;
+// This is handled internally by the share() builder
+// Capsule = PRE_Enc(pk_owner, k_owner)
+// ShareCollection = { C_i = AES_GCM(k_owner, f(i)) } for i = 1..n
 ```
 
 **Outputs**:
-- `Capsule` - Contains encrypted symmetric key
-- `Ciphertext` - Encrypted data
-- Arweave transaction ID
+- `Capsule` - Serialized Umbral capsule (encapsulated symmetric key)
+- `ShareCollection` - n encrypted Shamir shares
+- Arweave transaction IDs for both
 
 ### Capsule Structure
 
-```
+```rust
 Capsule {
-    point_e: G1Point,      // E = r * G
-    point_v: G1Point,      // V = r * pk_owner
-    signature: Signature,   // Proof of correct formation
+    id: CapsuleId,                // Unique identifier
+    secret_id: SecretId,          // Parent secret reference
+    capsule_data: Vec<u8>,        // Serialized Umbral Capsule bytes
+    owner_public_key: Vec<u8>,    // Owner's PRE public key
+    arweave_tx_id: Option<String>, // Arweave storage reference
 }
 ```
 
@@ -70,91 +79,71 @@ Capsule {
 
 **Actor**: Owner → Holder
 
-The owner generates re-encryption key fragments and distributes them to proxy nodes.
+The owner generates Umbral re-encryption key fragments (KFrags) and distributes them to the AO Holder-Process.
 
 ```rust
-// Define threshold parameters
-let threshold = 3;  // Minimum required
-let n_shares = 5;   // Total shares
-
-// Generate key fragments for requester
-let kfrags = owner_process.generate_kfrags(
-    &requester_public_key,
-    threshold,
-    n_shares
-)?;
-
-// Distribute to holder/proxies
-for (proxy_id, kfrag) in proxy_ids.iter().zip(kfrags.iter()) {
-    holder_process.store_kfrag(proxy_id, kfrag)?;
-}
+// Handled internally by share() builder:
+// 1. Generate n KFrags for the requester's public key
+// 2. Send each KFrag to the AO Holder-Process via ContractStorage
 ```
 
 **Outputs**:
-- `n_shares` KFrags distributed across proxies
-- Each proxy holds exactly one KFrag
+- `n` KFrags distributed to the Holder-Process
+- Each KFrag assigned a `holder_index` (1..=n)
 
 ### KFrag Structure
 
-```
+```rust
+#[derive(Zeroize, ZeroizeOnDrop)]
 KFrag {
-    id: FragmentId,
-    key: G2Point,           // Re-encryption key component
-    precursor: G1Point,     // Verification data
-    proof: KFragProof,      // Correctness proof
+    id: KFragId,                        // Unique identifier
+    secret_id: SecretId,                // Parent secret reference
+    holder_index: u8,                   // Position in holder set (1..=n)
+    holder_process_id: Option<String>,  // AO process ID
+    kfrag_data: Vec<u8>,                // Serialized Umbral KeyFrag (SENSITIVE)
 }
 ```
+
+**Security**: KFrag data is automatically zeroized from memory when dropped.
 
 ## Phase 4: Access Request
 
 **Actor**: Requester
 
-The requester initiates an access request by presenting their public key.
+The requester initiates secret recovery. The `recover()` builder handles the access request internally.
 
 ```rust
-// Create access request
-let request = AccessRequest::new(
-    &requester_keypair.public_key(),
-    &capsule_id,
-)?;
-
-// Submit request to holder
-let request_id = holder_process.submit_request(request)?;
+let recovered = client.recover()
+    .secret_id(&share_result.secret_id)
+    .requester_key(requester_sk)
+    .execute()?;
 ```
 
 **Outputs**:
-- Access request ID
-- Request recorded in holder process
+- Recovery request submitted to the workflow service
+- Secret metadata and threshold parameters retrieved
 
 ## Phase 5: Re-Encryption
 
-**Actor**: Proxy Nodes (via Holder)
+**Actor**: Holder-Process (AO)
 
-Each proxy node independently re-encrypts the capsule using their KFrag.
+Each holder independently re-encrypts the capsule using their KFrag to produce a CFrag. This is coordinated by the AO Holder-Process.
 
-```rust
-// Each proxy performs re-encryption
-// (Coordinated by holder process)
-let cfrags: Vec<CFrag> = holder_process
-    .process_reencryption(request_id)
-    .await?;
-
-// Verify threshold is met
-assert!(cfrags.len() >= threshold);
+```
+CFrag_i = PRE_ReEnc(KFrag_i, Capsule)
 ```
 
-**Outputs**:
-- `threshold` or more CFrags
-- Each CFrag is independently verifiable
+At least `threshold` (k) CFrags must be collected for successful recovery.
 
 ### CFrag Structure
 
-```
+```rust
 CFrag {
-    point_e1: G1Point,      // Re-encrypted E
-    point_v1: G1Point,      // Re-encrypted V
-    kfrag_id: FragmentId,   // Source KFrag ID
-    proof: CFraProof,       // Re-encryption proof
+    id: CFragId,                   // Unique identifier
+    secret_id: SecretId,           // Parent secret reference
+    kfrag_id: KFragId,             // Source KFrag ID
+    cfrag_data: Vec<u8>,           // Re-encrypted capsule fragment
+    holder_process_id: String,     // Source holder
 }
 ```
 
@@ -162,42 +151,34 @@ CFrag {
 
 **Actor**: Requester
 
-The requester combines CFrags and decrypts the data.
+The requester combines threshold CFrags with the capsule to recover the symmetric key, then decrypts the shares.
 
-```rust
-// Collect cfrags (at least threshold)
-let cfrags = requester_process.collect_cfrags(request_id)?;
-
-// Verify and combine cfrags
-let combined = requester_process.combine_cfrags(
-    &capsule,
-    &owner_public_key,
-    &cfrags
-)?;
-
-// Final decryption
-let plaintext = requester_process.decrypt(
-    &combined,
-    &ciphertext
-)?;
+```
+1. Combine k CFrags + Capsule → Recover symmetric key k_owner
+2. Decrypt ShareCollection shares: f(i) = AES_GCM_Dec(k_owner, C_i)
+3. Shamir reconstruction: secret = f(0) from k shares
 ```
 
 **Outputs**:
-- Decrypted plaintext data
+- Decrypted plaintext data (automatically zeroized when `SecretRecoveryResult` is dropped)
 
 ## Complete Flow Diagram
 
 ```
-    Owner                    Holder/Proxies              Requester
+    Owner                    Holder (AO)                Requester
       │                           │                          │
       │ Phase 1: Setup            │                          │
-      ├──────────────────────────▶│                          │
+      ├──(generate keypairs)──────│                          │
       │                           │                          │
       │ Phase 2: Encrypt          │                          │
-      ├──(capsule, ciphertext)───▶│                          │
+      ├──(capsule + shares)──────▶│ Arweave                  │
       │                           │                          │
       │ Phase 3: Distribute       │                          │
       ├──────(kfrags)────────────▶│                          │
+      │                           │                          │
+      │  Secret.state:            │                          │
+      │  Initialized→Split→       │                          │
+      │  Distributed              │                          │
       │                           │                          │
       │                           │◀─── Phase 4: Request ────┤
       │                           │                          │
@@ -207,6 +188,8 @@ let plaintext = requester_process.decrypt(
       │                           │      Phase 6: Decrypt    │
       │                           │                     ─────┤
       │                           │                          │
+      │                           │  Secret.state:           │
+      │                           │  →Recovered              │
 ```
 
 ## Error Handling
@@ -215,12 +198,22 @@ Each phase includes verification steps:
 
 | Phase | Verification |
 |-------|-------------|
-| Setup | Key validity check |
-| Encrypt | Capsule formation proof |
-| Distribute | KFrag correctness proof |
-| Request | Authorization check |
-| Re-Encrypt | CFrag validity proof |
-| Decrypt | Integrity verification |
+| Setup | Key pair validity check |
+| Encrypt | Capsule formation, share count validation |
+| Distribute | KFrag count matches threshold_n, holder index range |
+| Request | Secret state must be Distributed |
+| Re-Encrypt | CFrag validity, threshold met |
+| Decrypt | Integrity verification, Shamir reconstruction check |
+
+## State Transitions
+
+The `Secret` entity tracks progress through a state machine:
+
+```
+Initialized ──split()──▶ Split ──distribute()──▶ Distributed ──mark_recovered()──▶ Recovered
+```
+
+Each transition is validated - invalid transitions (e.g., distributing from Initialized state) return `DomainError::InvalidStateTransition`.
 
 ## Next Steps
 

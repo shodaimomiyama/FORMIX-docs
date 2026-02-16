@@ -4,226 +4,133 @@ sidebar_position: 2
 
 # 6フェーズワークフロー
 
-FORMIXプロトコルは6つの異なるフェーズを通じて動作し、それぞれが特定の暗号操作を実行します。
+FORMIXプロトコルは、それぞれ特定の暗号操作を実行する6つの異なるフェーズで動作します。
 
 ## フェーズ概要
 
 ```
-フェーズ1      フェーズ2      フェーズ3      フェーズ4      フェーズ5      フェーズ6
+フェーズ1       フェーズ2       フェーズ3       フェーズ4       フェーズ5       フェーズ6
 ┌──────┐      ┌──────┐      ┌──────┐      ┌──────┐      ┌──────┐      ┌──────┐
-│セット │──────│暗号化 │─────│ 配布  │─────│ 要求  │─────│再暗号 │──────│ 復号  │
-│ アップ│      │      │      │      │      │      │      │ 化    │      │      │
+│Setup │──────│暗号化 │─────│配布   │─────│要求   │─────│再暗号 │──────│復号   │
 └──────┘      └──────┘      └──────┘      └──────┘      └──────┘      └──────┘
-  Owner        Owner         Owner          Requester     Proxies      Requester
+  Owner        Owner         Owner          Requester     Holders      Requester
 ```
 
-## フェーズ1：セットアップ
+## フェーズ1: セットアップ
 
 **アクター**: Owner
 
-Ownerが暗号鍵ペアを生成し、システムを初期化します。
+Umbral PRE暗号鍵ペアを生成し、クライアントを初期化します。
 
 ```rust
-// Ownerの鍵ペアを生成
-let owner_keypair = KeyPair::generate();
+use formix::actions::client::DTpresClient;
 
-// AO上でOwnerプロセスを初期化
-let owner_process = OwnerProcess::new(owner_keypair)?;
+let client = DTpresClient::new(
+    "owner-process-id".to_string(),
+    "wallet-address".to_string(),
+    "https://ao.arweave.net".to_string(),
+    "https://arweave.net".to_string(),
+);
+
+let (owner_sk, owner_pk) = client.generate_keypair()?;
+let (requester_sk, requester_pk) = client.generate_keypair()?;
 ```
 
-**出力**:
-- Owner公開/秘密鍵ペア
-- 初期化されたOwnerプロセス
-
-## フェーズ2：暗号化
+## フェーズ2: 暗号化
 
 **アクター**: Owner
 
-Ownerが公開鍵を使用して機密データを暗号化します。
+Umbral PREを使用してデータを暗号化し、Shamirシェアを作成します：
 
-```rust
-// 暗号化するデータを準備
-let secret_data = SecretData::new(sensitive_bytes);
-
-// データを暗号化
-let (capsule, ciphertext) = owner_process.encrypt(&secret_data)?;
-
-// 暗号文をArweaveに保存
-let arweave_tx = storage.upload(&ciphertext).await?;
-```
-
-**出力**:
-- `Capsule` - 暗号化された対称鍵を含む
-- `Ciphertext` - 暗号化データ
-- ArweaveトランザクションID
+1. Ownerの公開鍵でPRE暗号化 → **Capsule** を生成
+2. 対称鍵のShamir秘密分散 → **ShareCollection** を生成
+3. 各シェアをOwnerの対称鍵でAES-GCM暗号化
 
 ### Capsule構造
 
-```
+```rust
 Capsule {
-    point_e: G1Point,      // E = r * G
-    point_v: G1Point,      // V = r * pk_owner
-    signature: Signature,   // 正しい形成の証明
+    id: CapsuleId,
+    secret_id: SecretId,
+    capsule_data: Vec<u8>,        // シリアライズされたUmbral Capsuleバイト
+    owner_public_key: Vec<u8>,
+    arweave_tx_id: Option<String>,
 }
 ```
 
-## フェーズ3：配布
+## フェーズ3: 配布
 
 **アクター**: Owner → Holder
 
-Ownerが再暗号化鍵フラグメントを生成し、プロキシノードに配布します。
-
-```rust
-// 閾値パラメータを定義
-let threshold = 3;  // 必要最小数
-let n_shares = 5;   // 総シェア数
-
-// Requester用の鍵フラグメントを生成
-let kfrags = owner_process.generate_kfrags(
-    &requester_public_key,
-    threshold,
-    n_shares
-)?;
-
-// Holder/プロキシに配布
-for (proxy_id, kfrag) in proxy_ids.iter().zip(kfrags.iter()) {
-    holder_process.store_kfrag(proxy_id, kfrag)?;
-}
-```
-
-**出力**:
-- プロキシ間に配布された`n_shares`個のKFrag
-- 各プロキシは正確に1つのKFragを保持
+Umbral再暗号化鍵フラグメント（KFrag）を生成し、AO Holder-Processに配布します。
 
 ### KFrag構造
 
-```
+```rust
+#[derive(Zeroize, ZeroizeOnDrop)]
 KFrag {
-    id: FragmentId,
-    key: G2Point,           // 再暗号化鍵コンポーネント
-    precursor: G1Point,     // 検証データ
-    proof: KFragProof,      // 正しさの証明
+    id: KFragId,
+    secret_id: SecretId,
+    holder_index: u8,                   // ホルダーセット内の位置 (1..=n)
+    holder_process_id: Option<String>,
+    kfrag_data: Vec<u8>,                // シリアライズされたUmbral KeyFrag（機密）
 }
 ```
 
-## フェーズ4：アクセス要求
+## フェーズ4: アクセス要求
 
 **アクター**: Requester
 
-Requesterが公開鍵を提示してアクセス要求を開始します。
-
 ```rust
-// アクセス要求を作成
-let request = AccessRequest::new(
-    &requester_keypair.public_key(),
-    &capsule_id,
-)?;
-
-// Holderに要求を送信
-let request_id = holder_process.submit_request(request)?;
+let recovered = client.recover()
+    .secret_id(&share_result.secret_id)
+    .requester_key(requester_sk)
+    .execute()?;
 ```
 
-**出力**:
-- アクセス要求ID
-- Holderプロセスに記録された要求
+## フェーズ5: 再暗号化
 
-## フェーズ5：再暗号化
+**アクター**: Holder-Process (AO)
 
-**アクター**: プロキシノード（Holder経由）
+各ホルダーが独立してKFragを使用してCapsuleを再暗号化し、CFragを生成します。
 
-各プロキシノードがKFragを使用してカプセルを独立して再暗号化します。
-
-```rust
-// 各プロキシが再暗号化を実行
-// （Holderプロセスによって調整）
-let cfrags: Vec<CFrag> = holder_process
-    .process_reencryption(request_id)
-    .await?;
-
-// 閾値が満たされていることを確認
-assert!(cfrags.len() >= threshold);
 ```
-
-**出力**:
-- `threshold`以上のCFrag
-- 各CFragは独立して検証可能
+CFrag_i = PRE_ReEnc(KFrag_i, Capsule)
+```
 
 ### CFrag構造
 
-```
+```rust
 CFrag {
-    point_e1: G1Point,      // 再暗号化されたE
-    point_v1: G1Point,      // 再暗号化されたV
-    kfrag_id: FragmentId,   // ソースKFrag ID
-    proof: CFraProof,       // 再暗号化証明
+    id: CFragId,
+    secret_id: SecretId,
+    kfrag_id: KFragId,
+    cfrag_data: Vec<u8>,
+    holder_process_id: String,
 }
 ```
 
-## フェーズ6：復号
+## フェーズ6: 復号
 
 **アクター**: Requester
 
-RequesterがCFragを結合してデータを復号します。
-
-```rust
-// cfragを収集（少なくとも閾値以上）
-let cfrags = requester_process.collect_cfrags(request_id)?;
-
-// cfragを検証して結合
-let combined = requester_process.combine_cfrags(
-    &capsule,
-    &owner_public_key,
-    &cfrags
-)?;
-
-// 最終復号
-let plaintext = requester_process.decrypt(
-    &combined,
-    &ciphertext
-)?;
+```
+1. k個のCFrag + Capsuleを結合 → 対称鍵 k_owner を復元
+2. ShareCollectionのシェアを復号: f(i) = AES_GCM_Dec(k_owner, C_i)
+3. Shamir再構成: secret = f(0) from k shares
 ```
 
-**出力**:
-- 復号された平文データ
+## 状態遷移
 
-## 完全フロー図
+`Secret` エンティティはステートマシンで進行状況を追跡します：
 
 ```
-    Owner                    Holder/Proxies              Requester
-      │                           │                          │
-      │ フェーズ1: セットアップ   │                          │
-      ├──────────────────────────▶│                          │
-      │                           │                          │
-      │ フェーズ2: 暗号化         │                          │
-      ├──(capsule, ciphertext)───▶│                          │
-      │                           │                          │
-      │ フェーズ3: 配布           │                          │
-      ├──────(kfrags)────────────▶│                          │
-      │                           │                          │
-      │                           │◀─── フェーズ4: 要求 ─────┤
-      │                           │                          │
-      │                           │──── フェーズ5: 再暗号 ──▶│
-      │                           │      (cfrags)            │
-      │                           │                          │
-      │                           │      フェーズ6: 復号     │
-      │                           │                     ─────┤
-      │                           │                          │
+Initialized ──split()──▶ Split ──distribute()──▶ Distributed ──mark_recovered()──▶ Recovered
 ```
 
-## エラー処理
-
-各フェーズには検証ステップが含まれています：
-
-| フェーズ | 検証 |
-|-------|-------------|
-| セットアップ | 鍵の有効性チェック |
-| 暗号化 | カプセル形成証明 |
-| 配布 | KFrag正しさ証明 |
-| 要求 | 認可チェック |
-| 再暗号化 | CFrag有効性証明 |
-| 復号 | 整合性検証 |
+各遷移はバリデーションされ、無効な遷移は `DomainError::InvalidStateTransition` を返します。
 
 ## 次のステップ
 
-- [セキュリティ特性](/docs/architecture/security) - 暗号保証
+- [セキュリティ特性](/docs/architecture/security) - 暗号学的保証
 - [APIリファレンス](/docs/api/actions-api) - 実装詳細

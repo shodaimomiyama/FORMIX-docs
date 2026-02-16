@@ -271,7 +271,7 @@ cargo test
 cargo test test_encryption
 
 # 特定のパッケージをビルド
-cargo build -p d-tpres-crypto
+cargo build -p formix
 
 # フィーチャー付きで実行
 cargo build --features "debug-mode"

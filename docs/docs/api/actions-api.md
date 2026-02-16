@@ -4,289 +4,233 @@ sidebar_position: 1
 
 # Actions Layer API
 
-The Actions layer provides the primary interface for interacting with FORMIX. All external operations are performed through this layer.
+The Actions layer provides the primary interface for interacting with FORMIX. All external operations are performed through `DTpresClient` or the underlying `ActionsContainer`.
 
 ## Overview
 
 ```rust
-use formix::actions::*;
+use formix::actions::client::DTpresClient;
+use formix::actions::di::DefaultActionsContainer;
 ```
 
-The Actions layer exposes functions for:
-- Key generation and management
-- Data encryption and decryption
-- Re-encryption key distribution
-- Access request handling
+The Actions layer exposes:
+- `DTpresClient` - High-level client with builder-pattern API
+- `ActionsContainer` - DI container aggregating Controller, WorkflowService, and CryptoService
+- `ShareBuilder` / `RecoverBuilder` - Type-state builders with compile-time safety
 
-## Key Management
+## Dependency Injection
 
-### `generate_keypair`
+### `ActionsContainer`
 
-Generates a new cryptographic key pair.
+Central DI container for the Actions layer, aggregating all dependencies.
 
 ```rust
-pub fn generate_keypair() -> Result<KeyPair, ActionError>
+pub struct ActionsContainer<C: CoreCryptoService, ST: StorageService> {
+    controller: ControllerContainer<C>,
+    workflow_services: WorkflowServiceContainer<ServiceCryptoServiceImpl<C>, ST>,
+    crypto_service: Arc<C>,
+}
 ```
 
-**Returns**: A new `KeyPair` containing public and private keys.
+**Default concrete type**:
 
-**Example**:
 ```rust
-let keypair = generate_keypair()?;
-println!("Public key: {:?}", keypair.public_key());
+pub type DefaultActionsContainer =
+    ActionsContainer<CoreCryptoServiceImpl, DefaultStorageService>;
+
+pub type DefaultStorageService =
+    StorageServiceImpl<ArweaveStorageServiceImpl, ContractStorageImpl<MockAOClient>>;
 ```
 
-### `derive_public_key`
-
-Derives a public key from a private key.
+### Creating an ActionsContainer
 
 ```rust
-pub fn derive_public_key(private_key: &PrivateKey) -> PublicKey
-```
+// Default (uses in-memory mock AO and Arweave)
+let container = DefaultActionsContainer::new();
 
-## Encryption Operations
+// With custom storage
+let container = DefaultActionsContainer::with_storage(arweave, contract);
 
-### `encrypt_data`
-
-Encrypts data using a public key.
-
-```rust
-pub fn encrypt_data(
-    public_key: &PublicKey,
-    data: &SecretData,
-) -> Result<(Capsule, Ciphertext), ActionError>
-```
-
-**Parameters**:
-- `public_key`: The owner's public key
-- `data`: Data to encrypt
-
-**Returns**: A tuple of `(Capsule, Ciphertext)`
-
-**Example**:
-```rust
-let data = SecretData::new(b"sensitive information".to_vec());
-let (capsule, ciphertext) = encrypt_data(&owner_pk, &data)?;
-```
-
-### `decrypt_data`
-
-Decrypts data using the owner's private key (direct decryption).
-
-```rust
-pub fn decrypt_data(
-    private_key: &PrivateKey,
-    capsule: &Capsule,
-    ciphertext: &Ciphertext,
-) -> Result<SecretData, ActionError>
-```
-
-## Re-Encryption Key Generation
-
-### `generate_kfrags`
-
-Generates re-encryption key fragments for a requester.
-
-```rust
-pub fn generate_kfrags(
-    owner_keypair: &KeyPair,
-    requester_public_key: &PublicKey,
-    threshold: u8,
-    shares: u8,
-) -> Result<Vec<KFrag>, ActionError>
-```
-
-**Parameters**:
-- `owner_keypair`: Owner's key pair
-- `requester_public_key`: Intended recipient's public key
-- `threshold`: Minimum fragments needed for decryption
-- `shares`: Total number of fragments to generate
-
-**Returns**: Vector of `KFrag` objects
-
-**Example**:
-```rust
-let kfrags = generate_kfrags(
-    &owner_keypair,
-    &requester_pk,
-    3,  // threshold
-    5,  // total shares
-)?;
-```
-
-### `verify_kfrag`
-
-Verifies the correctness of a KFrag.
-
-```rust
-pub fn verify_kfrag(
-    kfrag: &KFrag,
-    owner_public_key: &PublicKey,
-    requester_public_key: &PublicKey,
-) -> Result<bool, ActionError>
-```
-
-## Re-Encryption Operations
-
-### `reencrypt`
-
-Performs re-encryption using a KFrag.
-
-```rust
-pub fn reencrypt(
-    capsule: &Capsule,
-    kfrag: &KFrag,
-) -> Result<CFrag, ActionError>
-```
-
-**Parameters**:
-- `capsule`: The original capsule from encryption
-- `kfrag`: A re-encryption key fragment
-
-**Returns**: A `CFrag` (re-encrypted capsule fragment)
-
-### `verify_cfrag`
-
-Verifies the correctness of a CFrag.
-
-```rust
-pub fn verify_cfrag(
-    cfrag: &CFrag,
-    capsule: &Capsule,
-    owner_public_key: &PublicKey,
-    requester_public_key: &PublicKey,
-) -> Result<bool, ActionError>
-```
-
-## Decryption with Re-Encryption
-
-### `decrypt_reencrypted`
-
-Decrypts data using re-encrypted fragments.
-
-```rust
-pub fn decrypt_reencrypted(
-    requester_keypair: &KeyPair,
-    owner_public_key: &PublicKey,
-    capsule: &Capsule,
-    cfrags: &[CFrag],
-    ciphertext: &Ciphertext,
-) -> Result<SecretData, ActionError>
-```
-
-**Parameters**:
-- `requester_keypair`: Requester's key pair
-- `owner_public_key`: Original owner's public key
-- `capsule`: Original capsule
-- `cfrags`: Collection of re-encrypted fragments (>= threshold)
-- `ciphertext`: Encrypted data
-
-**Returns**: Decrypted `SecretData`
-
-**Example**:
-```rust
-let plaintext = decrypt_reencrypted(
-    &requester_keypair,
-    &owner_pk,
-    &capsule,
-    &cfrags,
-    &ciphertext,
-)?;
+// Fully custom dependencies
+let container = ActionsContainer::with_dependencies(
+    controller, workflow_services, crypto_service
+);
 ```
 
 ## Domain Entities
 
-### Secret
+### Secret (Aggregate Root)
 
-Represents encrypted data with its metadata.
+Manages the lifecycle and metadata of a secret. Does not hold the actual secret data.
 
 ```rust
 pub struct Secret {
-    pub id: SecretId,
-    pub capsule: Capsule,
-    pub ciphertext_ref: ArweaveRef,
-    pub owner: PublicKey,
-    pub created_at: Timestamp,
+    id: SecretId,
+    threshold_k: u8,                              // Min shares required
+    threshold_n: u8,                              // Total shares
+    state: SecretState,                           // State machine
+    capsule_id: Option<CapsuleId>,                // PRE capsule reference
+    share_collection_id: Option<ShareCollectionId>, // Encrypted shares reference
+    kfrag_ids: Vec<KFragId>,                      // Distributed key fragments
+    owner_public_key: Vec<u8>,                    // Owner's PRE public key
+    requester_public_key: Option<Vec<u8>>,        // Requester's PRE public key
+    created_at: u64,
 }
 ```
 
+**State Machine**:
+
+```
+Initialized → Split → Distributed → Recovered
+```
+
+| State | Description |
+|-------|-------------|
+| `Initialized` | Created, not yet processed |
+| `Split` | Shares and capsule created |
+| `Distributed` | KFrags distributed to holders |
+| `Recovered` | Secret recovered by requester |
+
 ### Capsule
 
-Contains the encapsulated symmetric key.
+Holds a serialized Umbral PRE capsule generated during encryption. Enables proxy re-encryption from owner to requester.
 
 ```rust
 pub struct Capsule {
-    pub point_e: G1Point,
-    pub point_v: G1Point,
-    pub signature: Signature,
+    id: CapsuleId,
+    secret_id: SecretId,
+    capsule_data: Vec<u8>,           // Serialized Umbral Capsule (public)
+    owner_public_key: Vec<u8>,       // Owner's PRE public key
+    arweave_tx_id: Option<String>,   // Arweave storage reference
+    created_at: u64,
+}
+```
+
+### ShareCollection
+
+Holds all n encrypted Shamir shares for a secret, stored atomically in a single Arweave transaction.
+
+```rust
+pub struct ShareCollection {
+    id: ShareCollectionId,
+    secret_id: SecretId,
+    threshold_k: u8,
+    threshold_n: u8,
+    shares: Vec<EncryptedShareData>,   // All n encrypted shares
+    arweave_tx_id: Option<String>,
+    created_at: u64,
+}
+
+pub struct EncryptedShareData {
+    index: u8,                         // Share index (1..=n)
+    encrypted_data: Vec<u8>,           // C_i = AES_GCM(k_O, f(i))
 }
 ```
 
 ### KFrag
 
-A re-encryption key fragment.
+Re-encryption key fragment distributed to Holder-Processes. Contains sensitive cryptographic data.
 
 ```rust
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct KFrag {
-    pub id: FragmentId,
-    pub key: G2Point,
-    pub precursor: G1Point,
-    pub proof: KFragProof,
+    id: KFragId,
+    secret_id: SecretId,
+    holder_index: u8,                  // 1..=n (position in holder set)
+    holder_process_id: Option<String>, // AO process ID of assigned holder
+    kfrag_data: Vec<u8>,               // Serialized Umbral KeyFrag (SENSITIVE)
+    created_at: u64,
 }
 ```
 
+**Security**: Implements `Zeroize` and `ZeroizeOnDrop` to clear sensitive `kfrag_data` from memory.
+
 ### CFrag
 
-A re-encrypted capsule fragment.
+Re-encrypted capsule fragment generated by Holder-Process.
 
 ```rust
 pub struct CFrag {
-    pub point_e1: G1Point,
-    pub point_v1: G1Point,
-    pub kfrag_id: FragmentId,
-    pub proof: CFragProof,
+    id: CFragId,
+    secret_id: SecretId,
+    kfrag_id: KFragId,
+    cfrag_data: Vec<u8>,               // Re-encrypted fragment
+    holder_process_id: String,
 }
 ```
 
 ## Value Objects
 
-### KeyPair
+### Type-Safe IDs
+
+All entity IDs use the newtype pattern for compile-time type safety:
 
 ```rust
-pub struct KeyPair {
-    private_key: PrivateKey,
-    public_key: PublicKey,
-}
+pub struct SecretId(String);
+pub struct CapsuleId(String);
+pub struct ShareCollectionId(String);
+pub struct KFragId(String);
+pub struct CFragId(String);
+```
 
-impl KeyPair {
-    pub fn generate() -> Self;
-    pub fn public_key(&self) -> &PublicKey;
-    pub fn private_key(&self) -> &PrivateKey;
+Each supports `new()`, `generate()` (UUID v4), and `as_str()`.
+
+### KeyPair
+
+Umbral PRE key pair with automatic zeroization of secret key.
+
+```rust
+#[derive(Zeroize, ZeroizeOnDrop)]
+pub struct KeyPair {
+    secret_key: Vec<u8>,    // Zeroized on drop
+    public_key: Vec<u8>,    // Not zeroized (public)
 }
 ```
 
+Does not implement `Clone` to prevent accidental copies of secret key material. Debug output redacts the secret key.
+
 ### SecretData
 
-```rust
-pub struct SecretData(Vec<u8>);
+Temporary value object for raw secret bytes during Shamir split operations.
 
-impl SecretData {
-    pub fn new(data: Vec<u8>) -> Self;
-    pub fn as_bytes(&self) -> &[u8];
+```rust
+#[derive(Zeroize, ZeroizeOnDrop)]
+pub struct SecretData {
+    secret_bytes: Vec<u8>,
 }
 ```
 
 ## Error Types
 
+### ActionError
+
 ```rust
 pub enum ActionError {
-    InvalidKey(String),
-    EncryptionFailed(String),
-    DecryptionFailed(String),
-    InvalidThreshold { threshold: u8, shares: u8 },
-    InsufficientFragments { required: u8, provided: u8 },
-    VerificationFailed(String),
-    StorageError(String),
+    ValidationFailed { code: String, message: String },
+    WorkflowFailed { message: String },
+    ResourceNotFound { resource: String },
+    CryptoError { message: String },
+    PartialStorageFailure {
+        capsule_tx_id: String,
+        successful_share_tx_ids: Vec<String>,
+        failed_shares: Vec<(String, String)>,
+        message: String,
+    },
+}
+```
+
+### DomainError
+
+```rust
+pub enum DomainError {
+    EntityValidation { entity_type, field, message },
+    InvalidStateTransition { entity_type, from_state, to_state, reason },
+    BusinessRuleViolation { rule, message },
+    ThresholdConstraintViolation { required_threshold, available_shares, operation },
+    CryptographicError { operation, details },
+    NotFound { entity_type, id },
+    StorageError { operation, details },
+    // ... and more
 }
 ```
 
