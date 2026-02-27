@@ -23,10 +23,10 @@ Phase 1        Phase 2        Phase 3        Phase 4        Phase 5        Phase
 The owner generates Umbral PRE cryptographic key pairs and initializes the client.
 
 ```rust
-use formix::actions::client::DTpresClient;
+use formix::actions::client::FormixClient;
 
 // Initialize client
-let client = DTpresClient::new(
+let client = FormixClient::new(
     "owner-process-id".to_string(),
     "wallet-address".to_string(),
     "https://ao.arweave.net".to_string(),
@@ -116,7 +116,9 @@ The requester initiates secret recovery. The `recover()` builder handles the acc
 let recovered = client.recover()
     .secret_id(&share_result.secret_id)
     .requester_key(requester_sk)
-    .execute()?;
+    .owner_key(owner_pk)
+    .execute()
+    .await?;
 ```
 
 **Outputs**:
@@ -138,12 +140,14 @@ At least `threshold` (k) CFrags must be collected for successful recovery.
 ### CFrag Structure
 
 ```rust
+#[derive(Zeroize, ZeroizeOnDrop)]
 CFrag {
     id: CFragId,                   // Unique identifier
     secret_id: SecretId,           // Parent secret reference
     kfrag_id: KFragId,             // Source KFrag ID
-    cfrag_data: Vec<u8>,           // Re-encrypted capsule fragment
-    holder_process_id: String,     // Source holder
+    holder_index: u8,              // Position in holder set (1..=n)
+    cfrag_data: Vec<u8>,           // Re-encrypted capsule fragment (SENSITIVE)
+    created_at: u64,
 }
 ```
 

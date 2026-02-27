@@ -89,6 +89,7 @@ FORMIX implements strict memory safety for cryptographic material:
 | Component | Protection |
 |-----------|-----------|
 | `KFrag.kfrag_data` | `Zeroize` + `ZeroizeOnDrop` |
+| `CFrag.cfrag_data` | `Zeroize` + `ZeroizeOnDrop` |
 | `KeyPair.secret_key` | `Zeroize` + `ZeroizeOnDrop` |
 | `SecretData.secret_bytes` | `Zeroize` + `ZeroizeOnDrop` |
 | `SecretRecoveryResult.recovered_secret` | `Zeroize` + `ZeroizeOnDrop` |

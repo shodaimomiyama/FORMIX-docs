@@ -2,15 +2,15 @@
 sidebar_position: 0
 ---
 
-# DTpresClient API
+# FormixClient API
 
-`DTpresClient` はFORMIXクライアントライブラリのメインエントリーポイントであり、内部の `ActionsContainer` をラップして、ビルダーパターンによるshare/recover操作のクリーンなパブリックAPIを提供します。
+`FormixClient` はFORMIXクライアントライブラリのメインエントリーポイントであり、内部の `ActionsContainer` をラップして、ビルダーパターンによるshare/recover操作のクリーンなパブリックAPIを提供します。
 
 ## 初期化
 
 ### `new`
 
-事前設定された値で `DTpresClient` を作成します。ウォレット/プロセスのセットアップを外部で処理するシナリオ向けです。
+事前設定された値で `FormixClient` を作成します。ウォレット/プロセスのセットアップを外部で処理するシナリオ向けです。
 
 ```rust
 pub fn new(
@@ -28,9 +28,9 @@ pub fn new(
 - `arweave_gateway_url`: ArweaveゲートウェイURL
 
 ```rust
-use formix::actions::client::DTpresClient;
+use formix::actions::client::FormixClient;
 
-let client = DTpresClient::new(
+let client = FormixClient::new(
     "process-id".to_string(),
     "wallet-address".to_string(),
     "https://ao.arweave.net".to_string(),
@@ -40,7 +40,7 @@ let client = DTpresClient::new(
 
 ### `init`（計画中）
 
-JWKウォレットを読み込み、AOプロセスを検出/起動して `DTpresClient` を初期化します。
+JWKウォレットを読み込み、AOプロセスを検出/起動して `FormixClient` を初期化します。
 
 ```rust
 pub fn init(config: InitConfig) -> ActionResult<Self>
@@ -50,7 +50,7 @@ pub fn init(config: InitConfig) -> ActionResult<Self>
 
 ### `with_storage`
 
-高度なユースケース向けに、事前設定されたストレージコンポーネントで `DTpresClient` を作成します。
+高度なユースケース向けに、事前設定されたストレージコンポーネントで `FormixClient` を作成します。
 
 ```rust
 pub fn with_storage(
@@ -146,7 +146,7 @@ pub struct SecretSharingResult {
 共有された秘密を取得・復号するための `RecoverBuilder` を作成します。Type-Stateパターンを使用します。
 
 ```rust
-pub fn recover(&self) -> RecoverBuilder<..., NotSet, NotSet>
+pub fn recover(&self) -> RecoverBuilder<..., NotSet, NotSet, NotSet>
 ```
 
 **戻り値**: 必須フィールドが `NotSet` の `RecoverBuilder`。
@@ -157,13 +157,16 @@ pub fn recover(&self) -> RecoverBuilder<..., NotSet, NotSet>
 |--------|------|-------------|
 | `.secret_id(id: &SecretId)` | 必須 | 復元する秘密のID |
 | `.requester_key(sk: SecretKey)` | 必須 | Requesterの秘密鍵（所有権移動） |
-| `.execute()` | 終端（sync） | 復元操作を実行 |
+| `.owner_key(pk: PublicKey)` | 必須 | Ownerの公開鍵（所有権移動） |
+| `.execute()` | 終端（async） | 復元操作を実行 |
 
 ```rust
 let recovered = client.recover()
     .secret_id(&share_result.secret_id)
     .requester_key(requester_sk)
-    .execute()?;
+    .owner_key(owner_pk)
+    .execute()
+    .await?;
 
 println!("Recovered: {:?}", recovered.recovered_secret);
 ```

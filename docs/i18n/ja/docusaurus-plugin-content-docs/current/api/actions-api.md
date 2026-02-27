@@ -4,17 +4,17 @@ sidebar_position: 1
 
 # Actions レイヤー API
 
-Actionsレイヤーは、FORMIXとの相互作用のための主要なインターフェースを提供します。すべての外部操作は `DTpresClient` または内部の `ActionsContainer` を通じて実行されます。
+Actionsレイヤーは、FORMIXとの相互作用のための主要なインターフェースを提供します。すべての外部操作は `FormixClient` または内部の `ActionsContainer` を通じて実行されます。
 
 ## 概要
 
 ```rust
-use formix::actions::client::DTpresClient;
+use formix::actions::client::FormixClient;
 use formix::actions::di::DefaultActionsContainer;
 ```
 
 Actionsレイヤーが公開する主要コンポーネント：
-- `DTpresClient` - ビルダーパターンAPIを持つ高レベルクライアント
+- `FormixClient` - ビルダーパターンAPIを持つ高レベルクライアント
 - `ActionsContainer` - Controller、WorkflowService、CryptoServiceを集約するDIコンテナ
 - `ShareBuilder` / `RecoverBuilder` - コンパイル時安全性を備えたType-Stateビルダー
 
@@ -39,7 +39,7 @@ pub type DefaultActionsContainer =
     ActionsContainer<CoreCryptoServiceImpl, DefaultStorageService>;
 
 pub type DefaultStorageService =
-    StorageServiceImpl<ArweaveStorageServiceImpl, ContractStorageImpl<MockAOClient>>;
+    ServiceStorageServiceImpl<ArweaveStorageServiceImpl, ContractStorageImpl<MockAOClient>>;
 ```
 
 ## ドメインエンティティ
@@ -130,17 +130,21 @@ pub struct KFrag {
 
 ### CFrag
 
-Holder-Processによって生成された再暗号化Capsuleフラグメント。
+Holder-Processによって生成された再暗号化Capsuleフラグメント。機密暗号データを含みます。
 
 ```rust
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct CFrag {
     id: CFragId,
     secret_id: SecretId,
     kfrag_id: KFragId,
-    cfrag_data: Vec<u8>,
-    holder_process_id: String,
+    holder_index: u8,                  // ホルダーセット内の位置 (1..=n)
+    cfrag_data: Vec<u8>,               // 再暗号化フラグメント（機密）
+    created_at: u64,
 }
 ```
+
+**セキュリティ**: `Zeroize` と `ZeroizeOnDrop` を実装し、機密な `cfrag_data` をメモリからクリアします。
 
 ## 値オブジェクト
 

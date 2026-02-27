@@ -2,15 +2,15 @@
 sidebar_position: 0
 ---
 
-# DTpresClient API
+# FormixClient API
 
-The `DTpresClient` provides the main entry point for the FORMIX client library, wrapping the internal `ActionsContainer` and providing a clean public API with builder-pattern share/recover operations.
+The `FormixClient` provides the main entry point for the FORMIX client library, wrapping the internal `ActionsContainer` and providing a clean public API with builder-pattern share/recover operations.
 
 ## Initialization
 
 ### `new`
 
-Creates a `DTpresClient` with pre-configured values. Intended for scenarios where wallet/process setup is handled externally.
+Creates a `FormixClient` with pre-configured values. Intended for scenarios where wallet/process setup is handled externally.
 
 ```rust
 pub fn new(
@@ -28,9 +28,9 @@ pub fn new(
 - `arweave_gateway_url`: Arweave gateway URL
 
 ```rust
-use formix::actions::client::DTpresClient;
+use formix::actions::client::FormixClient;
 
-let client = DTpresClient::new(
+let client = FormixClient::new(
     "process-id".to_string(),
     "wallet-address".to_string(),
     "https://ao.arweave.net".to_string(),
@@ -40,7 +40,7 @@ let client = DTpresClient::new(
 
 ### `init` (Planned)
 
-Initializes a `DTpresClient` by loading a JWK wallet and detecting/spawning an AO Process.
+Initializes a `FormixClient` by loading a JWK wallet and detecting/spawning an AO Process.
 
 ```rust
 pub fn init(config: InitConfig) -> ActionResult<Self>
@@ -50,7 +50,7 @@ pub fn init(config: InitConfig) -> ActionResult<Self>
 
 ### `with_storage`
 
-Creates a `DTpresClient` with pre-configured storage components for advanced use cases.
+Creates a `FormixClient` with pre-configured storage components for advanced use cases.
 
 ```rust
 pub fn with_storage(
@@ -146,7 +146,7 @@ pub struct SecretSharingResult {
 Creates a `RecoverBuilder` for retrieving and decrypting a shared secret. Also uses the type-state pattern.
 
 ```rust
-pub fn recover(&self) -> RecoverBuilder<..., NotSet, NotSet>
+pub fn recover(&self) -> RecoverBuilder<..., NotSet, NotSet, NotSet>
 ```
 
 **Returns**: A `RecoverBuilder` with required fields initially `NotSet`.
@@ -157,13 +157,16 @@ pub fn recover(&self) -> RecoverBuilder<..., NotSet, NotSet>
 |--------|------|-------------|
 | `.secret_id(id: &SecretId)` | Required | The ID of the secret to recover |
 | `.requester_key(sk: SecretKey)` | Required | Requester's secret key (owned) |
-| `.execute()` | Terminal (sync) | Execute the recovery operation |
+| `.owner_key(pk: PublicKey)` | Required | Owner's public key (owned) |
+| `.execute()` | Terminal (async) | Execute the recovery operation |
 
 ```rust
 let recovered = client.recover()
     .secret_id(&share_result.secret_id)
     .requester_key(requester_sk)
-    .execute()?;
+    .owner_key(owner_pk)
+    .execute()
+    .await?;
 
 println!("Recovered: {:?}", recovered.recovered_secret);
 ```

@@ -4,7 +4,7 @@ sidebar_position: 2
 
 # Quick Start
 
-This guide demonstrates how to share and recover secrets using the `DTpresClient` high-level API.
+This guide demonstrates how to share and recover secrets using the `FormixClient` high-level API.
 
 ## Overview
 
@@ -14,18 +14,18 @@ The FORMIX workflow consists of three main roles:
 2. **Holder** - Stores encrypted data and manages re-encryption keys
 3. **Requester** - Requests access to encrypted data
 
-The `DTpresClient` abstracts away low-level cryptographic operations (Capsule, KFrag, CFrag) and provides a simple builder-pattern API with compile-time safety via the type-state pattern.
+The `FormixClient` abstracts away low-level cryptographic operations (Capsule, KFrag, CFrag) and provides a simple builder-pattern API with compile-time safety via the type-state pattern.
 
 ## Basic Usage Example
 
 ### Step 1: Initialize the Client
 
-Create a `DTpresClient` instance with your process and gateway configuration:
+Create a `FormixClient` instance with your process and gateway configuration:
 
 ```rust
-use formix::actions::client::DTpresClient;
+use formix::actions::client::FormixClient;
 
-let client = DTpresClient::new(
+let client = FormixClient::new(
     "your-ao-process-id".to_string(),
     "your-wallet-address".to_string(),
     "https://ao.arweave.net".to_string(),
@@ -71,7 +71,9 @@ Use the recovery builder to retrieve and decrypt the shared secret:
 let recovered = client.recover()
     .secret_id(&share_result.secret_id)
     .requester_key(requester_sk)
-    .execute()?;
+    .owner_key(owner_pk)
+    .execute()
+    .await?;
 
 assert_eq!(recovered.recovered_secret, b"Sensitive data to be shared");
 ```

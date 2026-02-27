@@ -37,7 +37,7 @@ FORMIX/
 ```
 actions/
 ├── mod.rs
-├── client.rs          # DTpresClient - メインエントリーポイント
+├── client.rs          # FormixClient - メインエントリーポイント
 ├── builder.rs         # ShareBuilder & RecoverBuilder (Type-Stateパターン)
 ├── di.rs              # ActionsContainer DI
 ├── error.rs           # ActionErrorタイプ

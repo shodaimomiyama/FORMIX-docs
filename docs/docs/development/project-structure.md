@@ -37,7 +37,7 @@ The public API layer that external code interacts with.
 ```
 actions/
 ├── mod.rs
-├── client.rs          # DTpresClient - main entry point
+├── client.rs          # FormixClient - main entry point
 ├── builder.rs         # ShareBuilder & RecoverBuilder (type-state pattern)
 ├── di.rs              # ActionsContainer DI
 ├── error.rs           # ActionError types
@@ -171,7 +171,7 @@ ao/
 |------|---------|
 | `client/Cargo.toml` | Dependency management |
 | `client/src/lib.rs` | Crate root and public exports |
-| `client/src/actions/client.rs` | DTpresClient main entry point |
+| `client/src/actions/client.rs` | FormixClient main entry point |
 | `client/src/actions/di.rs` | ActionsContainer DI |
 | `client/src/domain/entities/secret.rs` | Secret aggregate root |
 

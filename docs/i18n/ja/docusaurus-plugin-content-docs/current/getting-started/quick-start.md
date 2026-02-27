@@ -4,7 +4,7 @@ sidebar_position: 2
 
 # クイックスタート
 
-このガイドでは、`DTpresClient` 高レベルAPIを使用して秘密の共有と復元を行う方法を説明します。
+このガイドでは、`FormixClient` 高レベルAPIを使用して秘密の共有と復元を行う方法を説明します。
 
 ## 概要
 
@@ -14,18 +14,18 @@ FORMIXワークフローは3つの主要なロールで構成されます：
 2. **Holder** - 暗号化データを保存し、再暗号化鍵を管理
 3. **Requester** - 暗号化データへのアクセスを要求
 
-`DTpresClient` は低レベルの暗号操作（Capsule, KFrag, CFrag）を抽象化し、Type-Stateパターンによるコンパイル時安全性を備えたビルダーパターンAPIを提供します。
+`FormixClient` は低レベルの暗号操作（Capsule, KFrag, CFrag）を抽象化し、Type-Stateパターンによるコンパイル時安全性を備えたビルダーパターンAPIを提供します。
 
 ## 基本的な使用例
 
 ### ステップ1：クライアントの初期化
 
-プロセスIDとゲートウェイ設定を指定して `DTpresClient` インスタンスを作成します：
+プロセスIDとゲートウェイ設定を指定して `FormixClient` インスタンスを作成します：
 
 ```rust
-use formix::actions::client::DTpresClient;
+use formix::actions::client::FormixClient;
 
-let client = DTpresClient::new(
+let client = FormixClient::new(
     "your-ao-process-id".to_string(),
     "your-wallet-address".to_string(),
     "https://ao.arweave.net".to_string(),
@@ -71,7 +71,9 @@ println!("KFrags distributed: {}", share_result.kfrag_count);
 let recovered = client.recover()
     .secret_id(&share_result.secret_id)
     .requester_key(requester_sk)
-    .execute()?;
+    .owner_key(owner_pk)
+    .execute()
+    .await?;
 
 assert_eq!(recovered.recovered_secret, b"Sensitive data to be shared");
 ```

@@ -10,7 +10,7 @@ FORMIX follows a **Clean Architecture** pattern with clear separation of concern
 
 ```
 ┌─────────────────────────────────────────┐
-│           Actions Layer                  │  ← Public API (DTpresClient, Builders)
+│           Actions Layer                  │  ← Public API (FormixClient, Builders)
 ├─────────────────────────────────────────┤
 │         Controller Layer                 │  ← Input Validation & DTO Extraction
 ├─────────────────────────────────────────┤
@@ -38,7 +38,7 @@ FORMIX follows a **Clean Architecture** pattern with clear separation of concern
 
 ### Actions Layer
 The entry point for all external interactions. This layer:
-- Provides `DTpresClient` as the main public API
+- Provides `FormixClient` as the main public API
 - Uses type-state `ShareBuilder` / `RecoverBuilder` for compile-time safety
 - Contains `ActionsContainer` for dependency injection
 - Delegates input validation to the Controller layer
@@ -143,7 +143,7 @@ FORMIX operates through AO processes for re-encryption coordination:
                     └──────────────┘
 ```
 
-The current `DTpresClient` is designed for **single-user (self-service) workflows** where the caller acts as both data owner and requester within one AO process context.
+The current `FormixClient` is designed for **single-user (self-service) workflows** where the caller acts as both data owner and requester within one AO process context.
 
 ## Data Flow
 
