@@ -4,6 +4,10 @@ sidebar_position: 0
 
 # FormixClient API
 
+:::caution Infrastructure Migration
+The `FormixClient` API documented below was designed for production use with AO Network / Arweave backends. During the infrastructure migration, **production connectivity is not operational**. The API itself is stable and functional — use it with `MockAOClient` or the local demo CLI for development and testing. See [Quick Start](/docs/getting-started/quick-start) for local workflow instructions.
+:::
+
 The `FormixClient` provides the main entry point for the FORMIX client library, wrapping the internal `ActionsContainer` and providing a clean public API with builder-pattern share/recover operations.
 
 ## Initialization

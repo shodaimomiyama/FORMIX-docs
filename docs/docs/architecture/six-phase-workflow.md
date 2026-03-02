@@ -4,6 +4,10 @@ sidebar_position: 2
 
 # 6-Phase Workflow
 
+:::info Local Mode
+The full 6-phase workflow is currently available in **local mode only**, where all phases execute on your machine without network dependencies. The protocol logic is identical — only the execution environment differs. Use the CLI demo (`cargo run --release -- local all`) to run the complete workflow. See [Quick Start](/docs/getting-started/quick-start) for details.
+:::
+
 The FORMIX protocol operates through six distinct phases, each performing specific cryptographic operations.
 
 ## Phase Overview

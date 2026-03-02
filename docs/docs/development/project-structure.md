@@ -22,8 +22,23 @@ FORMIX/
 │   │   └── di.rs              # Top-level DI configuration
 │   ├── Cargo.toml
 │   └── tests/
-├── ao/                        # AO Network smart contracts
-│   └── holder-process/        # Holder-Process (Lua)
+├── ao/                        # Smart contracts (CosmWasm Rust + AO Lua)
+│   ├── contracts/             # CosmWasm-based Rust contract (used locally via native linking)
+│   │   └── src/               # contract.rs, handlers.rs, msg.rs, state.rs
+│   ├── scripts/               # Deployment scripts (AO - currently unused)
+│   └── test/                  # Contract tests
+├── demo/                      # CLI demo application (local + production modes)
+│   ├── src/
+│   │   ├── main.rs            # CLI with clap: local all/share/reencrypt/recover
+│   │   ├── main_production.rs # Production-only CLI (currently non-operational)
+│   │   └── key_store.rs       # Key persistence & intermediate result serialization
+│   ├── Cargo.toml             # Dependencies: formix client, contract, clap, tokio
+│   ├── Makefile               # demo-local, setup, deploy targets
+│   ├── README.md              # Detailed usage documentation (Japanese)
+│   └── .formix-demo/          # Runtime data directory (generated)
+│       ├── owner/             # Owner keys + Phase 1 output
+│       ├── requester/         # Requester keys
+│       └── contract/          # Phase 2 output (CFrags)
 ├── docs/                      # Architecture and design docs
 └── .spec-workflow/            # Specification workflow files
 ```
@@ -157,12 +172,34 @@ adapter/
         └── message.rs          # Mock message handling
 ```
 
-## AO Smart Contracts
+## Smart Contracts
 
 ```
 ao/
-└── holder-process/            # Holder-Process (Lua)
-    └── ...                    # Re-encryption coordination logic
+├── contracts/                 # CosmWasm Rust contracts
+│   └── src/
+│       ├── contract.rs        # Contract entry points (instantiate, execute, query)
+│       ├── handlers.rs        # Message handlers (store KFrag, re-encrypt, etc.)
+│       ├── msg.rs             # ExecuteMsg, QueryMsg, InstantiateMsg definitions
+│       ├── state.rs           # Contract state management
+│       └── lib.rs             # Crate root
+├── scripts/                   # AO deployment scripts (currently unused)
+└── test/                      # Contract integration tests
+```
+
+In **local mode**, the contract code in `ao/contracts/` is linked natively as a Rust dependency by the `demo/` crate — it executes the same logic that would run on-chain, without requiring a Wasm runtime or network connectivity.
+
+## Demo Application
+
+```
+demo/
+├── src/
+│   ├── main.rs                # Full CLI: local {all,share,reencrypt,recover} + production commands
+│   ├── main_production.rs     # Simplified production-only CLI
+│   └── key_store.rs           # Persistent key storage, share/reencrypt result serialization
+├── Cargo.toml                 # Depends on formix (with production-ao, key-export features) + contract
+├── Makefile                   # demo-local, setup, deploy targets
+└── README.md                  # Usage guide with mermaid diagrams (Japanese)
 ```
 
 ## Key Files

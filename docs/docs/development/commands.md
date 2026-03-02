@@ -187,7 +187,41 @@ Starts the Docusaurus documentation site.
 make docs-site
 ```
 
+## Demo Commands
+
+The `demo/` directory provides a CLI tool for running the full TPRE workflow locally.
+
+### `make demo-local`
+
+Runs all three phases (share → re-encrypt → recover) in local mode:
+
+```bash
+cd demo
+make demo-local
+```
+
+Equivalent to: `cargo run --release -- local all`
+
+### Individual Phase Commands
+
+```bash
+cd demo
+
+# Phase 1: Owner encrypts and splits secret
+cargo run --release -- local share
+
+# Phase 2: Holder performs proxy re-encryption
+cargo run --release -- local reencrypt
+
+# Phase 3: Requester recovers the secret
+cargo run --release -- local recover
+```
+
 ## Deployment Commands
+
+:::caution Infrastructure Migration
+AO Network deployment is currently **not operational** due to the infrastructure migration. These commands are preserved as reference — they were previously used to deploy contracts to the AO Network. They will be updated when the new production backend is ready.
+:::
 
 ### `make deploy-local`
 

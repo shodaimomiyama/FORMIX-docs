@@ -4,6 +4,10 @@ sidebar_position: 1
 
 # Architecture Overview
 
+:::info Infrastructure Migration
+FORMIX is currently in production infrastructure migration. The architecture described below is fully implemented and functional in **local mode**. The Adapter layer (AO Network / Arweave connectivity) is being migrated to a new production backend. See [Introduction](/docs/intro#infrastructure-migration-notice) for details.
+:::
+
 FORMIX follows a **Clean Architecture** pattern with clear separation of concerns and dependency inversion.
 
 ## Layer Structure
@@ -90,6 +94,10 @@ Implements external integrations:
 - **External/Arweave** - `ArweaveClient` trait, transaction handling, deep hash, wallet management
 - **External/MockAO** - In-memory AO client for testing
 
+:::note
+The Adapter layer is the only layer affected by the infrastructure migration. Thanks to dependency inversion, the AO/Arweave adapters can be replaced with a new backend without changes to the core business logic, domain, or use case layers. In local mode, the contract logic from `ao/contracts/` is linked natively (not via Wasm/AO), providing identical cryptographic behavior.
+:::
+
 ## Storage Architecture
 
 FORMIX uses a composite storage pattern separating immutable data storage from contract communication:
@@ -123,12 +131,12 @@ All entities stored on Arweave use a consistent tagging strategy for discoverabi
 
 ## Process Architecture
 
-FORMIX operates through AO processes for re-encryption coordination:
+FORMIX operates through three roles for re-encryption coordination. In production mode (previously on AO Network), Holder runs as an on-chain process. In local mode, Holder contract logic is executed natively.
 
 ```
 ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
 │    Owner     │    │    Holder    │    │  Requester   │
-│  (Client)    │    │  (AO Proc)  │    │  (Client)    │
+│  (Client)    │    │  (Contract)  │    │  (Client)    │
 ├──────────────┤    ├──────────────┤    ├──────────────┤
 │ - Encrypt    │    │ - Store      │    │ - Request    │
 │ - Gen KFrags │───▶│ - Re-encrypt │◀───│ - Collect    │
@@ -137,13 +145,13 @@ FORMIX operates through AO processes for re-encryption coordination:
         │                   │                   │
         └───────────────────┴───────────────────┘
                            │
-                    ┌──────────────┐
-                    │   Arweave    │
-                    │   Storage    │
-                    └──────────────┘
+                ┌─────────────────────┐
+                │  Storage Backend    │
+                │  (Local / Arweave)  │
+                └─────────────────────┘
 ```
 
-The current `FormixClient` is designed for **single-user (self-service) workflows** where the caller acts as both data owner and requester within one AO process context.
+The current `FormixClient` is designed for **single-user (self-service) workflows** where the caller acts as both data owner and requester. In local mode, all three roles execute within a single process.
 
 ## Data Flow
 

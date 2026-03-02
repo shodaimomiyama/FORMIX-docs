@@ -46,12 +46,14 @@ npm install -g yarn
 yarn --version
 ```
 
-### AO CLI (Optional)
+### AO CLI (Currently Not Required)
 
-For deploying to AO Network, install the AO CLI:
+:::note
+AO CLI was previously used for deploying contracts to the AO Network. Due to the ongoing [infrastructure migration](/docs/intro#infrastructure-migration-notice), AO deployment is not currently operational. You do **not** need to install this for local mode.
+:::
 
 ```bash
-# Install AO CLI
+# Install AO CLI (only needed when production deployment resumes)
 npm install -g @permaweb/ao-cli
 ```
 
@@ -68,7 +70,7 @@ cd FORMIX
 # Install Rust dependencies and build
 make build
 
-# Install JavaScript dependencies
+# Install JavaScript dependencies (for tooling)
 yarn install
 ```
 
@@ -81,6 +83,17 @@ make test
 ```
 
 You should see all tests passing. If you encounter any issues, check the [troubleshooting section](#troubleshooting).
+
+## Try the Local Demo
+
+The quickest way to verify your setup is to run the local demo:
+
+```bash
+cd demo
+cargo run --release -- local all
+```
+
+This runs the full TPRE workflow (encrypt → re-encrypt → decrypt) entirely on your machine. See the [Quick Start](/docs/getting-started/quick-start) guide for details.
 
 ## Troubleshooting
 
