@@ -5,7 +5,17 @@
   width: 100%;
 }
 
-.featureSvg {
-  height: 200px;
-  width: 200px;
+.featureEmoji {
+  display: inline-block;
+  font-size: 3rem;
+  line-height: 1;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji",
+    sans-serif;
+  margin-bottom: 0.5rem;
+}
+
+@media screen and (min-width: 996px) {
+  .featureEmoji {
+    font-size: 3.5rem;
+  }
 }

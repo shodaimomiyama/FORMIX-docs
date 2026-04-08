@@ -1,52 +1,73 @@
 import type {ReactNode} from 'react';
 import clsx from 'clsx';
 import Heading from '@theme/Heading';
+import Translate, {translate} from '@docusaurus/Translate';
 import styles from './styles.module.css';
 
 type FeatureItem = {
-  title: string;
-  Svg: React.ComponentType<React.ComponentProps<'svg'>>;
+  emoji: string;
+  title: ReactNode;
   description: ReactNode;
 };
 
 const FeatureList: FeatureItem[] = [
   {
-    title: 'Easy to Use',
-    Svg: require('@site/static/img/undraw_docusaurus_mountain.svg').default,
+    emoji: '🔐',
+    title: (
+      <Translate id="homepage.features.noKeyServers.title">
+        No Key-Management Servers
+      </Translate>
+    ),
     description: (
-      <>
-        Docusaurus was designed from the ground up to be easily installed and
-        used to get your website up and running quickly.
-      </>
+      <Translate id="homepage.features.noKeyServers.description">
+        Keys are generated and split client-side; re-encryption runs in
+        ephemeral AO processes, so there is no long-lived key custodian.
+      </Translate>
     ),
   },
   {
-    title: 'Focus on What Matters',
-    Svg: require('@site/static/img/undraw_docusaurus_tree.svg').default,
+    emoji: '🌐',
+    title: (
+      <Translate id="homepage.features.censorshipResistant.title">
+        Censorship-Resistant & Always On
+      </Translate>
+    ),
     description: (
-      <>
-        Docusaurus lets you focus on your docs, and we&apos;ll do the chores. Go
-        ahead and move your docs into the <code>docs</code> directory.
-      </>
+      <Translate id="homepage.features.censorshipResistant.description">
+        Runs entirely on Arweave storage and the AO Network, so no single
+        operator can take the data or access control offline.
+      </Translate>
     ),
   },
   {
-    title: 'Powered by React',
-    Svg: require('@site/static/img/undraw_docusaurus_react.svg').default,
+    emoji: '🧩',
+    title: (
+      <Translate id="homepage.features.thresholdAccess.title">
+        k-of-n Threshold Access
+      </Translate>
+    ),
     description: (
-      <>
-        Extend or customize your website layout by reusing React. Docusaurus can
-        be extended while reusing the same header and footer.
-      </>
+      <Translate id="homepage.features.thresholdAccess.description">
+        Shamir secret sharing combined with Umbral proxy re-encryption ensures
+        that fewer than k participants can never recover the plaintext.
+      </Translate>
     ),
   },
 ];
 
-function Feature({title, Svg, description}: FeatureItem) {
+function Feature({emoji, title, description}: FeatureItem) {
   return (
     <div className={clsx('col col--4')}>
       <div className="text--center">
-        <Svg className={styles.featureSvg} role="img" />
+        <span
+          className={styles.featureEmoji}
+          role="img"
+          aria-label={translate({
+            id: 'homepage.features.emojiLabel',
+            message: 'Feature icon',
+          })}>
+          {emoji}
+        </span>
       </div>
       <div className="text--center padding-horiz--md">
         <Heading as="h3">{title}</Heading>

@@ -1,6 +1,7 @@
 import type {ReactNode} from 'react';
 import clsx from 'clsx';
 import Link from '@docusaurus/Link';
+import Translate, {translate} from '@docusaurus/Translate';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
@@ -21,7 +22,16 @@ function HomepageHeader() {
           <Link
             className="button button--secondary button--lg"
             to="/docs/intro">
-            Docusaurus Tutorial - 5min ⏱️
+            <Translate id="homepage.hero.button.getStarted">
+              Get Started
+            </Translate>
+          </Link>
+          <Link
+            className="button button--outline button--secondary button--lg"
+            to="/docs/getting-started/quick-start">
+            <Translate id="homepage.hero.button.quickStart">
+              Quick Start
+            </Translate>
           </Link>
         </div>
       </div>
@@ -30,11 +40,17 @@ function HomepageHeader() {
 }
 
 export default function Home(): ReactNode {
-  const {siteConfig} = useDocusaurusContext();
   return (
     <Layout
-      title={`Hello from ${siteConfig.title}`}
-      description="Description will go into a meta tag in <head />">
+      title={translate({
+        id: 'homepage.meta.title',
+        message: 'FORMIX Documentation',
+      })}
+      description={translate({
+        id: 'homepage.meta.description',
+        message:
+          'Secure permissionless access control for encrypted data on Arweave',
+      })}>
       <HomepageHeader />
       <main>
         <HomepageFeatures />
