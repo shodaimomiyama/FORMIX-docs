@@ -6,8 +6,8 @@ sidebar_position: 2
 
 This guide demonstrates how to run the FORMIX TPRE workflow using the CLI demo tool.
 
-:::caution
-FORMIX is currently in **infrastructure migration**. Production mode (AO Network / Arweave) is not operational at this time. This guide covers **local mode** only, which executes the full cryptographic workflow without any network dependency.
+:::info Current Status
+**Local mode** is the supported path today — it executes the full cryptographic workflow without any network dependency. Production mode (AO Network via HyperBEAM) is **experimental**; see [Current Status](/docs/intro#current-status).
 :::
 
 ## Overview
@@ -23,6 +23,10 @@ In local mode, all three roles run on your machine — the Holder contract logic
 ## Local Demo (CLI)
 
 The `demo/` directory provides a CLI tool that runs the complete TPRE workflow locally in three phases.
+
+:::caution Demo CLI temporarily broken on main
+After the contract ABI migration, the `demo` crate currently fails to build: its `contract` path dependency was renamed to `formix-ao-contract`, and it requests the removed `production-ao` feature flag (replaced by `hyperbeam`). Until `demo/Cargo.toml` is updated, use the [library path below](#use-formix-as-a-library) — `cargo run --example basic_usage` runs the full cycle and is verified to work.
+:::
 
 ### Run All Phases at Once
 
@@ -50,9 +54,9 @@ cargo run --release -- local share
 
 This phase:
 1. Generates Umbral PRE key pairs for Owner and Requester
-2. Encrypts data with a symmetric key, producing a **Capsule**
-3. Splits the symmetric key via **Shamir Secret Sharing** (2-of-3)
-4. Encrypts each share with **AES-GCM**
+2. Splits the **secret** via **Shamir Secret Sharing** (2-of-3)
+3. Encrypts each share with **AES-GCM** using the owner's symmetric key
+4. Encapsulates the symmetric key with Umbral PRE, producing a **Capsule**
 5. Generates **KFrags** (re-encryption key fragments)
 
 Output is saved to `.formix-demo/owner/{secret_id}.local-share.json`.
@@ -64,7 +68,7 @@ cargo run --release -- local reencrypt
 ```
 
 This phase:
-1. Instantiates contract Holder processes locally (native execution of CosmWasm contract logic)
+1. Instantiates contract Holder processes locally (native execution of the Rust contract logic)
 2. Submits KFrags and Capsule to each Holder
 3. Each Holder independently generates a **CFrag** (re-encrypted capsule fragment)
 
@@ -95,13 +99,70 @@ This phase:
     └── {secret_id}.local-reencrypt.json    # Phase 2 output (CFrags)
 ```
 
-## Production Mode (Currently Unavailable)
+## Use FORMIX as a Library
 
-:::danger Not Currently Operational
-Production mode requires connectivity to the AO Network and Arweave, which is not available during the infrastructure migration. The following is preserved as reference for when the new production backend is ready.
+You can drive the same workflow from your own Rust code using `FormixClient` with the in-memory Mock AO backend:
+
+```rust
+use std::sync::Arc;
+use formix::actions::FormixClient;
+use formix::adapter::external::mock_ao::MockAOClient;
+use formix::usecase::core::contract_storage::ContractStorageImpl;
+use formix::usecase::core::storage::ArweaveStorageServiceImpl;
+
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Client with in-memory Mock AO backend
+    let mock_ao = Arc::new(MockAOClient::new());
+    let arweave = Arc::new(ArweaveStorageServiceImpl::default());
+    let contract = Arc::new(ContractStorageImpl::new_single_process(mock_ao));
+
+    let client = FormixClient::with_storage(
+        "process_001".to_string(),
+        "wallet_address_example".to_string(),
+        "https://ao.arweave.net".to_string(),
+        "https://arweave.net".to_string(),
+        arweave,
+        contract,
+    );
+
+    // Generate key pairs
+    let (owner_sk, _owner_pk) = client.generate_keypair()?;
+    let (_requester_sk, requester_pk) = client.generate_keypair()?;
+
+    // Share a secret with a 2-of-3 threshold (Phase 1)
+    let result = client.share()
+        .secret(b"Hello, FORMIX!".to_vec())
+        .threshold(2)
+        .total_shares(3)
+        .owner_key(owner_sk)
+        .requester_key(requester_pk)
+        .execute()
+        .await?;
+
+    println!("Secret ID:   {}", result.secret_id);
+    println!("Capsule TX:  {}", result.capsule_tx_id);
+    println!("kFrag count: {}", result.kfrag_count);
+    Ok(())
+}
+```
+
+The complete version — including recovery of the secret — ships with the crate:
+
+```bash
+cd client
+cargo run --example basic_usage
+```
+
+With `ContractStorageImpl::new_single_process`, the **full share → re-encrypt → recover cycle runs in-memory**: the example prints the recovered plaintext (`"Hello, FORMIX!"`) and an audit transaction ID. See the [FormixClient API](/docs/api/formix-client) for details.
+
+## Production Mode (Experimental)
+
+:::caution Experimental
+Production connectivity to the AO Network via **HyperBEAM** (`hyperbeam` feature flag) is implemented but end-to-end integration is still in progress. Additionally, the gateway URL parameters of `FormixClient::new()` are currently stored but not wired into the network layer ([Issue #51](https://github.com/shodaimomiyama/FORMIX/issues/51)/#52). The following is a reference for the production workflow:
 :::
 
-FORMIX was originally designed to operate on Arweave (storage) + AO Network (compute). The `FormixClient` high-level API provided a builder-pattern interface for production workflows:
+FORMIX is designed to operate on Arweave (storage) + AO Network (compute). The `FormixClient` high-level API provides a builder-pattern interface for production workflows:
 
 ```rust
 use formix::actions::client::FormixClient;
@@ -136,7 +197,7 @@ let recovered = client.recover()
     .await?;
 ```
 
-This API handled encryption, Shamir secret splitting, Arweave storage, KFrag distribution to AO Holder processes, and CFrag collection automatically. It will be updated to target the new production backend once migration is complete.
+This API handles encryption, Shamir secret splitting, Arweave storage, KFrag distribution to AO Holder processes, and CFrag collection automatically. It becomes fully operational once HyperBEAM end-to-end integration lands.
 
 ## Next Steps
 

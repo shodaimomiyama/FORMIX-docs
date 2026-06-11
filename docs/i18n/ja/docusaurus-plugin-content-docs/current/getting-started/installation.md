@@ -46,14 +46,9 @@ npm install -g yarn
 yarn --version
 ```
 
-### AO CLI（オプション）
-
-AO Networkへのデプロイには、AO CLIをインストールします：
-
-```bash
-# AO CLIをインストール
-npm install -g @permaweb/ao-cli
-```
+:::note ローカルモードではAOデプロイツールは不要です
+AO Networkへのコントラクトデプロイ（実験的、HyperBEAM経由）には、`ao/` 内のNode.jsスクリプト（`@permaweb/aoconnect`）を使用します。これらは `cd ao && npm install --ignore-scripts` でインストールできます。ローカルモードではこれらは一切**不要**です。[現在のステータス](/docs/intro#current-status)を参照してください。
+:::
 
 ## リポジトリのクローン
 
@@ -62,25 +57,43 @@ git clone https://github.com/shodaimomiyama/FORMIX.git
 cd FORMIX
 ```
 
-## 依存関係のインストール
+## ビルド
+
+FORMIXは独立したCargoクレートとして構成されています。必要なものをビルドしてください：
 
 ```bash
-# Rustの依存関係をインストールしてビルド
-make build
+# コアクライアントライブラリ
+cd client
+make check        # cargo check
 
-# JavaScriptの依存関係をインストール
-yarn install
+# デモCLI
+cd ../demo
+make build        # cargo build --release
 ```
 
 ## インストールの確認
 
-テストスイートを実行して、すべてが正しく動作していることを確認します：
+クライアントのテストスイートを実行して、すべてが正しく動作していることを確認します：
 
 ```bash
+cd client
 make test
 ```
 
 すべてのテストがパスするはずです。問題が発生した場合は、[トラブルシューティング](#トラブルシューティング)セクションを確認してください。
+
+## ローカルデモを試す
+
+セットアップを確認する最も手早い方法は、実行可能なライブラリサンプルです。完全なTPREサイクル（共有 → 再暗号化 → 復元）をすべてあなたのマシン上で実行します：
+
+```bash
+cd client
+cargo run --example basic_usage
+```
+
+:::caution
+デモCLI（`cd demo && cargo run --release -- local all`）は、コントラクトABI移行後の現在のmainブランチでは**一時的に動作しません**（`demo/Cargo.toml` の古い `contract` 依存名と `production-ao` フィーチャーが原因です）。詳細は[クイックスタート](/docs/getting-started/quick-start)を参照してください。
+:::
 
 ## トラブルシューティング
 
@@ -111,11 +124,11 @@ Node.jsの互換性の問題が発生した場合：
 
 ### ビルドキャッシュの問題
 
-ビルドが予期せず失敗する場合は、キャッシュをクリアしてみてください：
+ビルドが予期せず失敗する場合は、キャッシュをクリアしてみてください（`client/` または `demo/` 内で実行）：
 
 ```bash
-make clean
-make build
+cargo clean
+cargo build
 ```
 
 ## 次のステップ

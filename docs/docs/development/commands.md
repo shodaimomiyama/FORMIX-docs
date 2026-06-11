@@ -4,196 +4,60 @@ sidebar_position: 2
 
 # Development Commands
 
-FORMIX uses `make` for build automation. This guide covers all available commands.
+FORMIX is organized as independent Cargo crates (`client/`, `demo/`, `ao/contracts/`) — there is **no workspace-level Makefile**. Each directory has its own commands.
 
-## Quick Reference
+## Client Library (`client/`)
+
+The core library uses `make` as a thin wrapper around Cargo:
 
 | Command | Description |
 |---------|-------------|
-| `make build` | Build all components |
-| `make test` | Run all tests |
-| `make clean` | Clean build artifacts |
-| `make fmt` | Format code |
-| `make lint` | Run linter |
-
-## Build Commands
-
-### `make build`
-
-Builds all Rust components including Wasm modules.
+| `make check` | `cargo check` — fast type check |
+| `make fmt` | `cargo fmt --all` — format code |
+| `make clippy` | Clippy with the project's strict lint set (pedantic + nursery, `unwrap`/`expect`/`panic` denied) |
+| `make clippy-strict` | Even stricter Clippy (restriction + cargo lints) for production/security audits |
+| `make lint` | `fmt` + `clippy` |
+| `make test` | `cargo test` — run the test suite |
+| `make all` | `check` + `lint` + `test` |
 
 ```bash
-make build
+cd client
+make all
 ```
 
-This command:
-1. Compiles the core library
-2. Builds all AO process Wasm modules
-3. Generates TypeScript bindings (if applicable)
-
-### `make build-release`
-
-Creates optimized production builds.
+### Cargo directly
 
 ```bash
-make build-release
+cd client
+
+# Run the test suite
+cargo test
+
+# Run a single test
+cargo test test_name
+
+# Run the runnable example
+cargo run --example basic_usage
+
+# Build with the experimental HyperBEAM backend
+cargo build --features hyperbeam
 ```
 
-### `make build-wasm`
+## Demo CLI (`demo/`)
 
-Builds only the WebAssembly modules.
+:::caution Temporarily broken on main
+The `demo` crate currently fails to build after the contract ABI migration — `demo/Cargo.toml` still references the renamed `contract` crate (now `formix-ao-contract`) and the removed `production-ao` feature. The targets below apply once that is fixed; meanwhile use `cd client && cargo run --example basic_usage`.
+:::
 
-```bash
-make build-wasm
-```
-
-### `make clean`
-
-Removes all build artifacts.
-
-```bash
-make clean
-```
-
-## Testing Commands
-
-### `make test`
-
-Runs the complete test suite.
-
-```bash
-make test
-```
-
-### `make test-unit`
-
-Runs only unit tests.
-
-```bash
-make test-unit
-```
-
-### `make test-integration`
-
-Runs integration tests.
-
-```bash
-make test-integration
-```
-
-### `make test-e2e`
-
-Runs end-to-end tests (requires local AO environment).
-
-```bash
-make test-e2e
-```
-
-### `make test-coverage`
-
-Generates test coverage report.
-
-```bash
-make test-coverage
-```
-
-Coverage reports are generated in `target/coverage/`.
-
-## Code Quality Commands
-
-### `make fmt`
-
-Formats all Rust code using `rustfmt`.
-
-```bash
-make fmt
-```
-
-### `make fmt-check`
-
-Checks formatting without modifying files.
-
-```bash
-make fmt-check
-```
-
-### `make lint`
-
-Runs Clippy linter.
-
-```bash
-make lint
-```
-
-### `make lint-fix`
-
-Runs Clippy and applies automatic fixes.
-
-```bash
-make lint-fix
-```
-
-## Development Commands
-
-### `make dev`
-
-Starts development environment with hot reloading.
-
-```bash
-make dev
-```
-
-### `make run-example`
-
-Runs the basic example workflow.
-
-```bash
-make run-example
-```
-
-### `make bench`
-
-Runs performance benchmarks.
-
-```bash
-make bench
-```
-
-Benchmark results are displayed in the terminal and saved to `target/criterion/`.
-
-## Documentation Commands
-
-### `make docs`
-
-Generates Rust documentation.
-
-```bash
-make docs
-```
-
-### `make docs-open`
-
-Generates and opens documentation in browser.
-
-```bash
-make docs-open
-```
-
-### `make docs-site`
-
-Starts the Docusaurus documentation site.
-
-```bash
-make docs-site
-```
-
-## Demo Commands
-
-The `demo/` directory provides a CLI tool for running the full TPRE workflow locally.
-
-### `make demo-local`
-
-Runs all three phases (share → re-encrypt → recover) in local mode:
+| Command | Description |
+|---------|-------------|
+| `make help` | List all targets with descriptions |
+| `make build` | Build the demo binary (release) |
+| `make demo-local` | Run all local phases: keygen → share → reencrypt → recover (alias for `demo-local-all`) |
+| `make demo-local-share REQUESTER_PUBKEY=<hex>` | Local Phase 1 only |
+| `make demo-local-reencrypt SECRET_ID=<id>` | Local Phase 2 only |
+| `make demo-local-recover SECRET_ID=<id>` | Local Phase 3 only |
+| `make demo-keygen ROLE=owner\|requester` | Generate a key pair for a role |
 
 ```bash
 cd demo
@@ -202,150 +66,62 @@ make demo-local
 
 Equivalent to: `cargo run --release -- local all`
 
-### Individual Phase Commands
+You can pass a custom secret:
+
+```bash
+make demo-local PLAINTEXT="my secret message"
+```
+
+### Individual phase commands (Cargo)
 
 ```bash
 cd demo
 
-# Phase 1: Owner encrypts and splits secret
-cargo run --release -- local share
+# Phase 1: Owner splits & encrypts the secret
+cargo run --release -- local share --requester-pubkey <hex>
 
 # Phase 2: Holder performs proxy re-encryption
-cargo run --release -- local reencrypt
+cargo run --release -- local reencrypt --secret-id <id>
 
 # Phase 3: Requester recovers the secret
-cargo run --release -- local recover
+cargo run --release -- local recover --secret-id <id>
 ```
 
-## Deployment Commands
+## AO Contract (`ao/`)
 
-:::caution Infrastructure Migration
-AO Network deployment is currently **not operational** due to the infrastructure migration. These commands are preserved as reference — they were previously used to deploy contracts to the AO Network. They will be updated when the new production backend is ready.
+:::caution Experimental
+Deployment targets the AO Network via HyperBEAM and is **experimental** — end-to-end integration is in progress, and parts of the deployment tooling are still being wired up. Local mode does not require any of this.
 :::
 
-### `make deploy-local`
-
-Deploys to local AO development environment.
-
 ```bash
-make deploy-local
+# Build the contract WASM
+cd ao
+npm install --ignore-scripts
+npm run build     # cargo build --target wasm32-unknown-unknown --release
+
+# Deploy the module to Arweave (requires a funded wallet)
+npm run deploy -- --wallet /path/to/arweave-keyfile.json
 ```
 
-### `make deploy-testnet`
-
-Deploys to AO testnet.
-
-```bash
-make deploy-testnet
-```
-
-**Note**: Requires proper configuration in `.env` file.
-
-## Utility Commands
-
-### `make check`
-
-Runs all checks (format, lint, test) without building.
-
-```bash
-make check
-```
-
-### `make ci`
-
-Runs the full CI pipeline locally.
-
-```bash
-make ci
-```
-
-This is equivalent to what runs in GitHub Actions.
-
-### `make setup`
-
-Sets up the development environment.
-
-```bash
-make setup
-```
-
-This installs:
-- Required Rust targets
-- Development dependencies
-- Git hooks
+From `demo/`, the same flow is wrapped as `make setup` / `make deploy` (see `make help`).
 
 ## Environment Variables
 
-Create a `.env` file from the template:
+| File | Variable | Description |
+|------|----------|-------------|
+| `demo/.env` (from `demo/.env.example`) | `ARWEAVE_WALLET_PATH` | Path to the Arweave JWK wallet used by deployment targets |
 
-```bash
-cp .env.example .env
-```
-
-Key environment variables:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `RUST_LOG` | Log level | `info` |
-| `AO_GATEWAY` | AO gateway URL | `https://ao.arweave.dev` |
-| `ARWEAVE_GATEWAY` | Arweave gateway | `https://arweave.net` |
-
-## Cargo Commands
-
-You can also use Cargo directly:
-
-```bash
-# Build
-cargo build
-
-# Test
-cargo test
-
-# Run specific test
-cargo test test_encryption
-
-# Build specific package
-cargo build -p formix-crypto
-
-# Run with features
-cargo build --features "debug-mode"
-```
-
-## Troubleshooting
-
-### Build Fails with Missing Target
-
-```bash
-rustup target add wasm32-unknown-unknown
-```
-
-### Lint Errors
-
-```bash
-# See all lint issues
-make lint
-
-# Auto-fix what's possible
-make lint-fix
-```
-
-### Test Timeouts
-
-For slow tests, increase the timeout:
-
-```bash
-RUST_TEST_TIME_UNIT=60000 make test
-```
+`RUST_LOG` controls log verbosity for all Rust binaries (e.g. `RUST_LOG=debug`).
 
 ## Contributing
 
-Before submitting a PR, run:
+Before submitting a PR, run from `client/`:
 
 ```bash
-make ci
+make all
 ```
 
-This ensures your code passes all checks.
+This runs the same checks as CI (format, strict Clippy, tests).
 
 ## Next Steps
 

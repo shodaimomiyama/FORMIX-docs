@@ -20,8 +20,9 @@ const FeatureList: FeatureItem[] = [
     ),
     description: (
       <Translate id="homepage.features.noKeyServers.description">
-        Keys are generated and split client-side; re-encryption runs in
-        ephemeral AO processes, so there is no long-lived key custodian.
+        Keys are generated and split client-side; re-encryption runs across
+        distributed AO processes that each hold only a key fragment, so no
+        single party ever has the full key.
       </Translate>
     ),
   },

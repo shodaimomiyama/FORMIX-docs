@@ -22,11 +22,12 @@ FORMIX/
 │   │   └── di.rs              # Top-level DI configuration
 │   ├── Cargo.toml
 │   └── tests/
-├── ao/                        # Smart contracts (CosmWasm Rust + AO Lua)
-│   ├── contracts/             # CosmWasm-based Rust contract (used locally via native linking)
-│   │   └── src/               # contract.rs, handlers.rs, msg.rs, state.rs
-│   ├── scripts/               # Deployment scripts (AO - currently unused)
+├── ao/                        # AO contract + HyperBEAM deployment (Rust → WASM)
+│   ├── contracts/             # formix-ao-contract crate (used locally via native linking)
+│   │   └── src/               # lib.rs, handlers.rs, message.rs, state.rs, getrandom_impl.rs
+│   ├── scripts/               # Node.js deployment scripts (deploy.js, instantiate.js, …) — experimental
 │   └── test/                  # Contract tests
+├── ao_cwao/                   # Legacy CosmWasm-era contract (kept for reference)
 ├── demo/                      # CLI demo application (local + production modes)
 │   ├── src/
 │   │   ├── main.rs            # CLI with clap: local all/share/reencrypt/recover
@@ -39,8 +40,8 @@ FORMIX/
 │       ├── owner/             # Owner keys + Phase 1 output
 │       ├── requester/         # Requester keys
 │       └── contract/          # Phase 2 output (CFrags)
-├── docs/                      # Architecture and design docs
-└── .spec-workflow/            # Specification workflow files
+├── docs/                      # Architecture and design docs (PRD.md, status.md, …)
+└── .spec-workflow/            # Specification workflow files (specs, approvals, steering)
 ```
 
 ## Source Code Structure
@@ -151,13 +152,16 @@ adapter/
 │   └── cfrag_impl.rs           # ArweaveCFragRepository
 └── external/                   # External service clients
     ├── mod.rs
-    ├── ao/                     # AO Network client
+    ├── ao/                     # AO Network client (HyperBEAM)
     │   ├── mod.rs
     │   ├── client.rs           # AOClient trait
-    │   ├── production_client.rs # Production AO client
-    │   ├── message.rs          # ExecuteMsg, QueryMsg, Binary
-    │   ├── config.rs           # AO configuration
-    │   └── data_item.rs        # AO data item handling
+    │   ├── hyperbeam_client.rs # HyperBEAMClient (experimental, `hyperbeam` feature)
+    │   ├── signer.rs           # RFC-9421 rsa-pss-sha512 HTTP message signatures
+    │   ├── tabm.rs             # TABM multipart encoder (HyperBEAM wire format)
+    │   ├── wallet.rs           # JWK wallet handling
+    │   ├── message.rs          # AO message types
+    │   └── config.rs           # AO endpoint configuration
+    ├── ao_cwao/                # Legacy CosmWasm-era AO client (reference)
     ├── arweave/                # Arweave client
     │   ├── mod.rs
     │   ├── client.rs           # ArweaveClient trait
@@ -176,16 +180,18 @@ adapter/
 
 ```
 ao/
-├── contracts/                 # CosmWasm Rust contracts
+├── contracts/                 # formix-ao-contract crate (Rust → WASM, HyperBEAM target)
 │   └── src/
-│       ├── contract.rs        # Contract entry points (instantiate, execute, query)
-│       ├── handlers.rs        # Message handlers (store KFrag, re-encrypt, etc.)
-│       ├── msg.rs             # ExecuteMsg, QueryMsg, InstantiateMsg definitions
-│       ├── state.rs           # Contract state management
-│       └── lib.rs             # Crate root
-├── scripts/                   # AO deployment scripts (currently unused)
-└── test/                      # Contract integration tests
+│       ├── lib.rs             # WASM entry point
+│       ├── handlers.rs        # Action dispatch & handlers (DelegateKFrag, Reencrypt, …)
+│       ├── message.rs         # AOMessage / AOResponse / AOS wire types
+│       ├── state.rs           # ProcessState, roles, Capsule status machine
+│       └── getrandom_impl.rs  # Deterministic randomness shim for WASM
+├── scripts/                   # HyperBEAM deployment scripts (Node.js, experimental)
+└── test/                      # Contract tests
 ```
+
+See the [AO Contract API](/docs/api/ao-contract) for the handler reference.
 
 In **local mode**, the contract code in `ao/contracts/` is linked natively as a Rust dependency by the `demo/` crate — it executes the same logic that would run on-chain, without requiring a Wasm runtime or network connectivity.
 
@@ -197,10 +203,14 @@ demo/
 │   ├── main.rs                # Full CLI: local {all,share,reencrypt,recover} + production commands
 │   ├── main_production.rs     # Simplified production-only CLI
 │   └── key_store.rs           # Persistent key storage, share/reencrypt result serialization
-├── Cargo.toml                 # Depends on formix (with production-ao, key-export features) + contract
+├── Cargo.toml                 # Depends on the formix client + the AO contract crate
 ├── Makefile                   # demo-local, setup, deploy targets
 └── README.md                  # Usage guide with mermaid diagrams (Japanese)
 ```
+
+:::caution
+The `demo` crate is **temporarily broken** on current main: its `Cargo.toml` still references the pre-migration `contract` crate name (now `formix-ao-contract`) and the removed `production-ao` feature. See [Quick Start](/docs/getting-started/quick-start) for the working alternative.
+:::
 
 ## Key Files
 

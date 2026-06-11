@@ -94,7 +94,8 @@ FORMIX implements strict memory safety for cryptographic material:
 | `SecretData.secret_bytes` | `Zeroize` + `ZeroizeOnDrop` |
 | `SecretRecoveryResult.recovered_secret` | `Zeroize` + `ZeroizeOnDrop` |
 | `ShareBuilder.secret` | Wrapped in `Zeroizing<Vec<u8>>` |
-| `SecretSharingRequest.secret` | Custom `Drop` with `zeroize()` |
+| `SecretSharingRequest.secret` | Wrapped in `Zeroizing<Vec<u8>>` (zeroized even on panic) |
+| Contract `StoredKeyFrag` / `StoredCFrag` | `Zeroize` + `ZeroizeOnDrop` (WASM linear memory) |
 
 Debug output for sensitive types displays `[REDACTED]` instead of actual values.
 
@@ -102,15 +103,15 @@ Debug output for sensitive types displays `[REDACTED]` instead of actual values.
 
 ### Replay Attacks
 
-- Each capsule and secret has a unique identifier
-- Re-encryption requests are tracked by nonce
-- Duplicate requests are rejected
+- Each capsule and secret has a unique identifier (UUID)
+- Contract submissions are **idempotent**: re-submitting an already-stored kFrag is acknowledged without re-processing
+- Contract state changes are restricted to the registered owner address (authorized-sender check)
 
 ### Man-in-the-Middle
 
-- All communications are authenticated
-- KFrags include origin verification
-- CFrags are cryptographically bound to requesters
+- The production AO transport (HyperBEAM) signs HTTP messages with RFC-9421 `rsa-pss-sha512` signatures
+- Each kFrag embeds `VerificationData` (verifying / delegating / receiving public keys) checked before re-encryption
+- CFrags are cryptographically bound to the requester's public key
 
 ### Key Extraction
 
@@ -136,7 +137,7 @@ FORMIX security depends on:
 | Eavesdropping | End-to-end encryption |
 | Proxy compromise (< t) | Threshold distribution |
 | Storage compromise | Data encrypted at rest on Arweave |
-| Replay attacks | Nonce-based request tracking |
+| Replay attacks | Unique IDs, idempotent submissions, authorized-sender checks |
 | Memory inspection | Zeroize-on-drop for all sensitive data |
 
 ### Out of Scope
@@ -156,6 +157,8 @@ Recommended configurations:
 - Medium:        (3, 5)  - Balanced
 - High security: (5, 9)  - Maximum tolerance
 ```
+
+The implementation enforces `2 ≤ k ≤ n ≤ 20` (`MIN_THRESHOLD` / `MAX_SHARES` in [Constants & Limits](/docs/api/formix-client#constants--limits)).
 
 ### Key Management
 

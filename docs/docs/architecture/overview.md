@@ -4,8 +4,8 @@ sidebar_position: 1
 
 # Architecture Overview
 
-:::info Infrastructure Migration
-FORMIX is currently in production infrastructure migration. The architecture described below is fully implemented and functional in **local mode**. The Adapter layer (AO Network / Arweave connectivity) is being migrated to a new production backend. See [Introduction](/docs/intro#infrastructure-migration-notice) for details.
+:::info Current Status
+The architecture described below is fully implemented and functional in **local mode**. In the Adapter layer, production AO Network connectivity via **HyperBEAM** is experimental (E2E integration in progress). See [Current Status](/docs/intro#current-status) for details.
 :::
 
 FORMIX follows a **Clean Architecture** pattern with clear separation of concerns and dependency inversion.
@@ -90,12 +90,13 @@ Defines persistence abstractions using traits with dependency inversion:
 ### Adapter Layer
 Implements external integrations:
 - **RepositoryImpl** - Arweave-backed implementations of all repository traits
-- **External/AO** - `AOClient` trait, `ProductionAOClient`, message types (`ExecuteMsg`, `QueryMsg`)
+- **External/AO** - `AOClient` trait and `HyperBEAMClient` (experimental, `hyperbeam` feature): RFC-9421 `rsa-pss-sha512` HTTP message signatures, TABM multipart encoding, JWK wallet handling
+- **External/AO-CWAO** - Legacy CosmWasm-era client (`ao_cwao/`), kept for reference during the HyperBEAM transition
 - **External/Arweave** - `ArweaveClient` trait, transaction handling, deep hash, wallet management
-- **External/MockAO** - In-memory AO client for testing
+- **External/MockAO** - In-memory AO client for testing (the default backend)
 
 :::note
-The Adapter layer is the only layer affected by the infrastructure migration. Thanks to dependency inversion, the AO/Arweave adapters can be replaced with a new backend without changes to the core business logic, domain, or use case layers. In local mode, the contract logic from `ao/contracts/` is linked natively (not via Wasm/AO), providing identical cryptographic behavior.
+The Adapter layer is the only layer affected by the backend transition. Thanks to dependency inversion, the AO/Arweave adapters can be swapped without changes to the core business logic, domain, or use case layers. In local mode, the contract logic from `ao/contracts/` is linked natively (not via Wasm/AO), providing identical cryptographic behavior.
 :::
 
 ## Storage Architecture
@@ -131,7 +132,7 @@ All entities stored on Arweave use a consistent tagging strategy for discoverabi
 
 ## Process Architecture
 
-FORMIX operates through three roles for re-encryption coordination. In production mode (previously on AO Network), Holder runs as an on-chain process. In local mode, Holder contract logic is executed natively.
+FORMIX operates through three roles for re-encryption coordination. In production mode (AO Network via HyperBEAM, experimental), Holder runs as an on-chain process. In local mode, Holder contract logic is executed natively.
 
 ```
 ┌──────────────┐    ┌──────────────┐    ┌──────────────┐

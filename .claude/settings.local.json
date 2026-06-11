@@ -12,7 +12,10 @@
       "Bash(xargs sed:*)",
       "Bash(yarn build)",
       "Bash(tree:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Skill(dig:dig)",
+      "Bash(xargs:*)",
+      "Bash(wc:*)"
     ]
   }
 }
