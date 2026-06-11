@@ -32,37 +32,35 @@ Three distinct process types (Owner, Holder, Requester) operate as WebAssembly m
 | Storage | Arweave | Permanent, decentralized data storage |
 | Compute | AO Network | Distributed process execution |
 | Cryptography | Umbral TPRE (Rust/Wasm) | Threshold proxy re-encryption |
-| Smart Contracts | AO Network (Lua) | Re-encryption key coordination |
+| Smart Contracts | AO Network (Rust → WASM) | Re-encryption key coordination |
 
-## Infrastructure Migration Notice
+## Current Status
 
-:::caution Production Environment Migration in Progress
-FORMIX is currently undergoing a **production infrastructure migration**. The system was originally built on the **AO Network** (Arweave's compute layer), but due to significant changes in the AO ecosystem, on-chain functionality is temporarily unavailable. **Only local-complete mode is currently supported.**
+:::info Current Status (June 2026)
+FORMIX runs fully in **local mode** (in-memory Mock AO backend) — this is the supported path today.
+Production connectivity to the AO Network via **HyperBEAM** (`hyperbeam` feature flag: RFC-9421 HTTP
+message signatures, TABM encoding) is **experimental**; end-to-end integration is in progress.
+See [FormixClient API](/docs/api/formix-client) for feature-flag details.
 :::
 
 ### Background
 
-FORMIX's contract layer was initially built using **cwao** — an experimental CosmWasm-based runtime for AO, developed approximately two years ago. However, two major factors led to a strategic pivot:
-
-1. **AO system architecture changes** — The AO Network underwent fundamental protocol changes, breaking compatibility with the cwao runtime. Combined with CosmWasm's limited traction in the ecosystem, cwao development was discontinued.
-2. **AO ecosystem direction shift** — AO's focus has shifted from smart contract infrastructure toward **HyperBEAM**, a "Verifiable Internet" OS project. With founder Sam Williams describing AO's vision as a "moonshot for a new internet," the ecosystem's direction has diverged significantly from conventional smart contract use cases, resulting in reduced developer adoption.
-
-As a result, FORMIX is evaluating alternative production environments while maintaining full functionality in local mode.
+FORMIX's contract layer was initially built using **cwao** — an experimental CosmWasm-based runtime for AO. The AO Network underwent fundamental protocol changes that broke compatibility with cwao, and the AO ecosystem's focus shifted toward **HyperBEAM**, its "Verifiable Internet" OS. FORMIX has since pivoted with the ecosystem: the contract is now a plain **Rust → WASM** module targeting HyperBEAM, and the client gained an experimental **HyperBEAM transport** (`hyperbeam` feature: RFC-9421 `rsa-pss-sha512` HTTP message signatures, TABM multipart encoding).
 
 ### What This Means for Developers
 
 | Mode | Status | Description |
 |------|--------|-------------|
-| **Local Mode** | Available | Full TPRE workflow runs locally without any network dependency. Cryptographic operations (Umbral PRE, Shamir SSS, AES-GCM) and contract logic execute natively. |
-| **Production Mode** | Migration in Progress | AO Network / Arweave deployment is not currently operational. A new production target is under evaluation. |
+| **Local Mode** (default) | Available | Full TPRE workflow runs locally without any network dependency. Cryptographic operations (Umbral PRE, Shamir SSS, AES-GCM) and contract logic execute natively against an in-memory Mock AO backend. |
+| **Production Mode** (`hyperbeam` feature) | Experimental | HyperBEAM client (HTTP signatures, TABM encoding) is implemented; end-to-end integration with the AO Network is in progress. Not yet recommended for real workloads. |
 
-The core cryptographic library and protocol logic are **fully functional and stable** — the migration only affects the infrastructure layer (storage and compute backends).
+The core cryptographic library and protocol logic are **fully functional and stable** — ongoing work only affects the infrastructure layer (storage and compute backends).
 
 ## Development Status
 
 FORMIX core development continues actively. Current priorities:
 
-- Production environment migration to a new backend
+- HyperBEAM end-to-end integration (production AO Network connectivity)
 - CLI demo tool for local workflow verification (`demo/` directory)
 - Core cryptographic library stabilization
 - Additional security audits
