@@ -15,7 +15,7 @@
     "message": "鍵管理サーバー不要"
   },
   "homepage.features.noKeyServers.description": {
-    "message": "鍵はクライアントで生成・分割し、再暗号化も AO 上の一時プロセスで実行します。常駐の鍵管理者は不要です。"
+    "message": "鍵はクライアントで生成・分割し、再暗号化は鍵フラグメントのみを保持する分散 AO プロセス群で実行します。完全な鍵を持つ主体はどこにも存在しません。"
   },
   "homepage.features.censorshipResistant.title": {
     "message": "検閲耐性・常時稼働"

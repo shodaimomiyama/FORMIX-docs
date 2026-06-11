@@ -5,7 +5,7 @@ sidebar_position: 0
 # FormixClient API
 
 :::info 現在のステータス
-`FormixClient` APIは**ローカルモード**（インメモリのMock AOバックエンド、デフォルト）では安定しており、完全に機能します。**HyperBEAM**（`hyperbeam` フィーチャーフラグ）経由の本番接続は**実験的**であり、エンドツーエンド統合は進行中です。下記の[フィーチャーフラグ](#フィーチャーフラグ)と、ローカルワークフローの手順については[クイックスタート](/docs/getting-started/quick-start)を参照してください。
+`FormixClient` APIは**ローカルモード**（インメモリのMock AOバックエンド、デフォルト）では安定しており、完全に機能します。**HyperBEAM**（`hyperbeam` フィーチャーフラグ）経由の本番接続は**実験的**であり、エンドツーエンド統合は進行中です。下記の[フィーチャーフラグ](#feature-flags)と、ローカルワークフローの手順については[クイックスタート](/docs/getting-started/quick-start)を参照してください。
 :::
 
 `FormixClient` はFORMIXクライアントライブラリのメインエントリーポイントであり、内部の `ActionsContainer` をラップして、ビルダーパターンによるshare/recover操作のクリーンなパブリックAPIを提供します。
@@ -112,7 +112,7 @@ pub fn ao_gateway_url(&self) -> &str
 pub fn arweave_gateway_url(&self) -> &str
 ```
 
-## フィーチャーフラグ
+## フィーチャーフラグ {#feature-flags}
 
 | フィーチャー | デフォルト | 説明 |
 |---------|---------|-------------|
@@ -126,7 +126,7 @@ formix = { version = "0.1" }
 tokio = { version = "1", features = ["rt", "macros"] }
 ```
 
-## 定数と制限
+## 定数と制限 {#constants--limits}
 
 `formix::usecase::core::crypto::constants` で定義されています:
 
