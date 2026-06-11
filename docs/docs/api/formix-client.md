@@ -336,8 +336,4 @@ cd client
 cargo run --example basic_usage
 ```
 
-It demonstrates `with_storage()` with the Mock AO backend, key generation, a 2-of-3 share, and a recovery attempt.
-
-:::note Expected behavior with the Mock backend
-Recovery with `MockAOClient` fails with `ActionError::ResourceNotFound` — the mock has no Holder processes producing cFrags. This is expected; full recovery requires AO Network connectivity (Phase 2 re-encryption). Use the [demo CLI](/docs/getting-started/quick-start) to run the complete share → reencrypt → recover workflow locally.
-:::
+It demonstrates `with_storage()` with the Mock AO backend, key generation, a 2-of-3 share, and recovery. With `ContractStorageImpl::new_single_process`, the **complete share → re-encrypt → recover cycle runs in-memory** — the mock backend performs the Holder re-encryption locally, so the example ends with the secret recovered and an audit transaction ID.

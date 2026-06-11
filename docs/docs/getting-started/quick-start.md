@@ -24,6 +24,10 @@ In local mode, all three roles run on your machine — the Holder contract logic
 
 The `demo/` directory provides a CLI tool that runs the complete TPRE workflow locally in three phases.
 
+:::caution Demo CLI temporarily broken on main
+After the contract ABI migration, the `demo` crate currently fails to build: its `contract` path dependency was renamed to `formix-ao-contract`, and it requests the removed `production-ao` feature flag (replaced by `hyperbeam`). Until `demo/Cargo.toml` is updated, use the [library path below](#use-formix-as-a-library) — `cargo run --example basic_usage` runs the full cycle and is verified to work.
+:::
+
 ### Run All Phases at Once
 
 ```bash
@@ -143,16 +147,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-The complete version (including a recovery attempt) ships with the crate:
+The complete version — including recovery of the secret — ships with the crate:
 
 ```bash
 cd client
 cargo run --example basic_usage
 ```
 
-:::note
-With the Mock backend, **recovery fails with `ResourceNotFound`** — there are no Holder processes producing cFrags. This is expected; use the demo CLI above for the full share → reencrypt → recover cycle. See the [FormixClient API](/docs/api/formix-client) for details.
-:::
+With `ContractStorageImpl::new_single_process`, the **full share → re-encrypt → recover cycle runs in-memory**: the example prints the recovered plaintext (`"Hello, FORMIX!"`) and an audit transaction ID. See the [FormixClient API](/docs/api/formix-client) for details.
 
 ## Production Mode (Experimental)
 

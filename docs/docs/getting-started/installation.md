@@ -46,16 +46,9 @@ npm install -g yarn
 yarn --version
 ```
 
-### AO CLI (Currently Not Required)
-
-:::note
-AO CLI was previously used for deploying contracts to the AO Network. Due to the ongoing [infrastructure migration](/docs/intro#infrastructure-migration-notice), AO deployment is not currently operational. You do **not** need to install this for local mode.
+:::note AO deployment tooling is not required for local mode
+Contract deployment to the AO Network (experimental, via HyperBEAM) uses the Node.js scripts in `ao/` (`@permaweb/aoconnect`) — installed with `cd ao && npm install --ignore-scripts`. You do **not** need any of this for local mode. See [Current Status](/docs/intro#current-status).
 :::
-
-```bash
-# Install AO CLI (only needed when production deployment resumes)
-npm install -g @permaweb/ao-cli
-```
 
 ## Clone the Repository
 
@@ -64,21 +57,26 @@ git clone https://github.com/shodaimomiyama/FORMIX.git
 cd FORMIX
 ```
 
-## Install Dependencies
+## Build
+
+FORMIX is organized as independent Cargo crates — build the one you need:
 
 ```bash
-# Install Rust dependencies and build
-make build
+# Core client library
+cd client
+make check        # cargo check
 
-# Install JavaScript dependencies (for tooling)
-yarn install
+# Demo CLI
+cd ../demo
+make build        # cargo build --release
 ```
 
 ## Verify Installation
 
-Run the test suite to verify everything is working:
+Run the client test suite to verify everything is working:
 
 ```bash
+cd client
 make test
 ```
 
@@ -86,14 +84,16 @@ You should see all tests passing. If you encounter any issues, check the [troubl
 
 ## Try the Local Demo
 
-The quickest way to verify your setup is to run the local demo:
+The quickest way to verify your setup is the runnable library example — it executes the full TPRE cycle (share → re-encrypt → recover) entirely on your machine:
 
 ```bash
-cd demo
-cargo run --release -- local all
+cd client
+cargo run --example basic_usage
 ```
 
-This runs the full TPRE workflow (encrypt → re-encrypt → decrypt) entirely on your machine. See the [Quick Start](/docs/getting-started/quick-start) guide for details.
+:::caution
+The demo CLI (`cd demo && cargo run --release -- local all`) is **temporarily broken** on current main after the contract ABI migration (stale `contract` dependency name and `production-ao` feature in `demo/Cargo.toml`). See [Quick Start](/docs/getting-started/quick-start) for details.
+:::
 
 ## Troubleshooting
 
@@ -124,11 +124,11 @@ If you encounter Node.js compatibility issues:
 
 ### Build Cache Issues
 
-If builds fail unexpectedly, try cleaning the cache:
+If builds fail unexpectedly, try cleaning the cache (inside `client/` or `demo/`):
 
 ```bash
-make clean
-make build
+cargo clean
+cargo build
 ```
 
 ## Next Steps
