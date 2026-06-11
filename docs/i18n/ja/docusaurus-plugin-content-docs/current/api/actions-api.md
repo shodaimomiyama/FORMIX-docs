@@ -4,6 +4,10 @@ sidebar_position: 1
 
 # Actions レイヤー API
 
+:::info 現在のステータス
+ActionsレイヤーAPIは完全に実装されており、安定しています。開発には `MockAOClient`（インメモリ、デフォルト）またはローカルデモCLIを使用してください。HyperBEAM経由の本番AO接続は実験的です — [FormixClientのフィーチャーフラグ](/docs/api/formix-client#feature-flags)を参照してください。
+:::
+
 Actionsレイヤーは、FORMIXとの相互作用のための主要なインターフェースを提供します。すべての外部操作は `FormixClient` または内部の `ActionsContainer` を通じて実行されます。
 
 ## 概要
@@ -42,6 +46,21 @@ pub type DefaultStorageService =
     ServiceStorageServiceImpl<ArweaveStorageServiceImpl, ContractStorageImpl<MockAOClient>>;
 ```
 
+### ActionsContainerの作成
+
+```rust
+// デフォルト（インメモリのモックAOとArweaveを使用）
+let container = DefaultActionsContainer::new();
+
+// カスタムストレージを使用
+let container = DefaultActionsContainer::with_storage(arweave, contract);
+
+// 完全にカスタムの依存関係
+let container = ActionsContainer::with_dependencies(
+    controller, workflow_services, crypto_service
+);
+```
+
 ## ドメインエンティティ
 
 ### Secret（集約ルート）
@@ -78,7 +97,7 @@ Initialized → Split → Distributed → Recovered
 
 ### Capsule
 
-暗号化時に生成されたUmbral PRE Capsuleのシリアライズデータを保持します。
+暗号化時に生成されたUmbral PRE Capsuleのシリアライズデータを保持します。OwnerからRequesterへのプロキシ再暗号化を可能にします。
 
 ```rust
 pub struct Capsule {
@@ -93,7 +112,7 @@ pub struct Capsule {
 
 ### ShareCollection
 
-秘密のすべてのn個の暗号化Shamirシェアを保持します。
+秘密のすべてのn個の暗号化Shamirシェアを保持し、単一のArweaveトランザクションにアトミックに保存されます。
 
 ```rust
 pub struct ShareCollection {
@@ -101,7 +120,7 @@ pub struct ShareCollection {
     secret_id: SecretId,
     threshold_k: u8,
     threshold_n: u8,
-    shares: Vec<EncryptedShareData>,
+    shares: Vec<EncryptedShareData>,   // すべてのn個の暗号化シェア
     arweave_tx_id: Option<String>,
     created_at: u64,
 }
@@ -114,19 +133,21 @@ pub struct EncryptedShareData {
 
 ### KFrag
 
-Holder-Processに配布される再暗号化鍵フラグメント。
+Holder-Processに配布される再暗号化鍵フラグメント。機密暗号データを含みます。
 
 ```rust
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct KFrag {
     id: KFragId,
     secret_id: SecretId,
-    holder_index: u8,
-    holder_process_id: Option<String>,
+    holder_index: u8,                  // 1..=n（ホルダーセット内の位置）
+    holder_process_id: Option<String>, // 割り当てられたホルダーのAOプロセスID
     kfrag_data: Vec<u8>,               // シリアライズされたUmbral KeyFrag（機密）
     created_at: u64,
 }
 ```
+
+**セキュリティ**: `Zeroize` と `ZeroizeOnDrop` を実装し、機密な `kfrag_data` をメモリからクリアします。
 
 ### CFrag
 
@@ -150,6 +171,8 @@ pub struct CFrag {
 
 ### 型安全なID
 
+すべてのエンティティIDは、コンパイル時の型安全性のためにnewtypeパターンを使用します:
+
 ```rust
 pub struct SecretId(String);
 pub struct CapsuleId(String);
@@ -158,17 +181,25 @@ pub struct KFragId(String);
 pub struct CFragId(String);
 ```
 
+各IDは `new()`、`generate()`（UUID v4）、`as_str()` をサポートします。
+
 ### KeyPair
+
+秘密鍵を自動的にゼロ化するUmbral PRE鍵ペア。
 
 ```rust
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct KeyPair {
-    secret_key: Vec<u8>,
-    public_key: Vec<u8>,
+    secret_key: Vec<u8>,    // ドロップ時にゼロ化
+    public_key: Vec<u8>,    // ゼロ化なし（公開情報）
 }
 ```
 
+秘密鍵素材の偶発的なコピーを防ぐため `Clone` を実装していません。Debug出力では秘密鍵は伏せられます。
+
 ### SecretData
+
+Shamir分割操作中の生の秘密バイト列を扱う一時的な値オブジェクト。
 
 ```rust
 #[derive(Zeroize, ZeroizeOnDrop)]
@@ -193,6 +224,21 @@ pub enum ActionError {
         failed_shares: Vec<(String, String)>,
         message: String,
     },
+}
+```
+
+### DomainError
+
+```rust
+pub enum DomainError {
+    EntityValidation { entity_type, field, message },
+    InvalidStateTransition { entity_type, from_state, to_state, reason },
+    BusinessRuleViolation { rule, message },
+    ThresholdConstraintViolation { required_threshold, available_shares, operation },
+    CryptographicError { operation, details },
+    NotFound { entity_type, id },
+    StorageError { operation, details },
+    // ... その他
 }
 ```
 
