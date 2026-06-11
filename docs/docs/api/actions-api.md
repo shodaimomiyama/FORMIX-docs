@@ -4,8 +4,8 @@ sidebar_position: 1
 
 # Actions Layer API
 
-:::caution Infrastructure Migration
-The Actions layer API is fully implemented and stable. During the infrastructure migration, use `MockAOClient` (in-memory) or the local demo CLI for development. Production AO/Arweave adapters will be updated when the new backend is ready.
+:::info Current Status
+The Actions layer API is fully implemented and stable. Use `MockAOClient` (in-memory, the default) or the local demo CLI for development. Production AO connectivity via HyperBEAM is experimental — see the [FormixClient feature flags](/docs/api/formix-client#feature-flags).
 :::
 
 The Actions layer provides the primary interface for interacting with FORMIX. All external operations are performed through `FormixClient` or the underlying `ActionsContainer`.
