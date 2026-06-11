@@ -10,6 +10,16 @@ The full 6-phase workflow is currently available in **local mode only**, where a
 
 The FORMIX protocol operates through six distinct phases, each performing specific cryptographic operations.
 
+## Relation to the PRD's 3-Phase Model
+
+FORMIX's PRD defines the protocol as **3 phases**; this page breaks the same protocol into 6 finer-grained steps for explanation. The mapping:
+
+| PRD Phase | This page |
+|-----------|-----------|
+| **PHASE 1** — Secret splitting & initial distribution (client-side, steps 1-1…1-9) | Phase 1 (Setup), Phase 2 (Encryption), Phase 3 (Distribution: kFrag generation & dispatch) |
+| **PHASE 2** — Distributed key-fragment management (AO Network, steps 2-1…2-6) | Holder-side receipt/storage of kFrags (end of Phase 3), Phase 5 (Re-Encryption) |
+| **PHASE 3** — Secret recovery (client-side, steps 3-1…3-8) | Phase 4 (Access Request), Phase 6 (Decryption) |
+
 ## Phase Overview
 
 ```
@@ -52,9 +62,9 @@ let (requester_sk, requester_pk) = client.generate_keypair()?;
 
 The owner encrypts data using Umbral PRE and creates Shamir shares. Internally, the `share()` builder orchestrates:
 
-1. PRE encryption with owner's public key → produces **Capsule**
-2. Shamir Secret Sharing of the symmetric key → produces **ShareCollection**
-3. AES-GCM encryption of each share with the owner's symmetric key
+1. Shamir Secret Sharing of the **secret** `f(0)` → shares `f(1)…f(n)`
+2. AES-GCM encryption of each share with the owner's symmetric key `k_owner` → produces **ShareCollection**
+3. PRE encryption of `k_owner` with the owner's public key → produces **Capsule**
 
 ```rust
 // This is handled internally by the share() builder
@@ -76,6 +86,7 @@ Capsule {
     capsule_data: Vec<u8>,        // Serialized Umbral Capsule bytes
     owner_public_key: Vec<u8>,    // Owner's PRE public key
     arweave_tx_id: Option<String>, // Arweave storage reference
+    created_at: u64,
 }
 ```
 
@@ -105,6 +116,7 @@ KFrag {
     holder_index: u8,                   // Position in holder set (1..=n)
     holder_process_id: Option<String>,  // AO process ID
     kfrag_data: Vec<u8>,                // Serialized Umbral KeyFrag (SENSITIVE)
+    created_at: u64,
 }
 ```
 
